@@ -194,7 +194,7 @@ public sealed class SeatHands
 	{
 		var flight = CardMotion.Fly(Worker, RestingPose, 0.32f, lift: 0.1f);
 		if (_rest != null)
-			flight.TweenCallback(Callable.From(() => Worker.Pose = HandPose.Rest));
+			flight.TweenCallback(Callable.From(() => { Worker.Pose = HandPose.Rest; }));
 	}
 
 	/// <summary>Reaches for the first card, pinches it, and takes the others along (fixed to the hand).</summary>
