@@ -17,14 +17,18 @@ public partial class GlassHand : Node3D
 
 	private static Shader? _glass;
 	private readonly MeshInstance3D _mesh;
+	private readonly ShaderMaterial _material;
 	private HandPose _pose = HandPose.Relaxed;
+	private Color _tint;
+	private Tween? _tintTween;
 
 	public GlassHand(bool right, Color tint, HandPose? pose = null)
 	{
 		Right = right;
-		var material = new ShaderMaterial { Shader = _glass ??= new Shader { Code = GlassCode } };
-		material.SetShaderParameter("tint", tint);
-		_mesh = new MeshInstance3D { MaterialOverride = material, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+		_material = new ShaderMaterial { Shader = _glass ??= new Shader { Code = GlassCode } };
+		_tint = tint;
+		_material.SetShaderParameter("tint", tint);
+		_mesh = new MeshInstance3D { MaterialOverride = _material, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
 		AddChild(_mesh);
 		Pose = pose ?? HandPose.Relaxed;
 	}
@@ -41,6 +45,25 @@ public partial class GlassHand : Node3D
 		}
 	}
 
+	/// <summary>The glass colour; changing it fades over a moment (a speaker's hands turn blue, say).</summary>
+	public Color Tint
+	{
+		get => _tint;
+		set
+		{
+			var from = _tint;
+			_tint = value;
+			_tintTween?.Kill();
+			if (!IsInsideTree())
+			{
+				_material.SetShaderParameter("tint", value);
+				return;
+			}
+			_tintTween = CreateTween();
+			_tintTween.TweenMethod(Callable.From<Color>(c => _material.SetShaderParameter("tint", c)), from, value, 0.25f);
+		}
+	}
+
 	/// <summary>Where a pinched card sits, in this hand's frame.</summary>
 	public Vector3 PinchPoint => HandShape.PinchPoint(Right);
 
@@ -49,6 +72,7 @@ public partial class GlassHand : Node3D
 	{
 		foreach (float t in PinchSteps)
 			HandShape.Mesh(HandPose.Relaxed, HandPose.Pinch, t, Right);
+		HandShape.Mesh(HandPose.Rest, Right);
 	}
 
 	/// <summary>Closes (or opens) thumb and index finger, over about a tenth of a second.</summary>

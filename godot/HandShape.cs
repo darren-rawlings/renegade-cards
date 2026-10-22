@@ -16,8 +16,11 @@ public sealed record HandPose(string Name, float[][] Curl, float ThumbAcross, fl
 	/// <summary>Loose and natural: the working hand at rest and reaching.</summary>
 	public static readonly HandPose Relaxed = new("relaxed", new[] { C(14, 20, 12), C(14, 20, 12), C(15, 21, 12), C(17, 24, 14) }, 0.15f, 18f, new[] { -9f, -1f, 6f, 13f });
 
+	/// <summary>Lying palm down on the table, fingers nearly flat: a hand at rest at its place.</summary>
+	public static readonly HandPose Rest = new("rest", new[] { C(6, 9, 6), C(6, 9, 6), C(7, 10, 6), C(8, 11, 7) }, 0.1f, 6f, new[] { -8f, -1f, 6f, 12f });
+
 	/// <summary>Holding a fan of cards: fingers behind the cards, the thumb pressed across the front.</summary>
-	public static readonly HandPose Hold = new("hold", new[] { C(26, 34, 22), C(26, 34, 22), C(27, 35, 22), C(30, 39, 25) }, 0.7f, 26f, new[] { -6f, 0f, 4f, 9f });
+	public static readonly HandPose Hold = new("hold", new[] { C(10, 14, 9), C(10, 14, 9), C(11, 15, 9), C(13, 17, 10) }, 0.75f, 24f, new[] { -6f, 0f, 4f, 9f });
 
 	/// <summary>Picking up a card: thumb and index finger together, the other fingers tucked out of the way.</summary>
 	public static readonly HandPose Pinch = new("pinch", new[] { C(40, 44, 18), C(46, 62, 38), C(50, 66, 40), C(54, 70, 42) }, 0.6f, 12f, new[] { -3f, 1f, 6f, 11f }, ThumbToIndex: true);

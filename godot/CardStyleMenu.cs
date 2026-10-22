@@ -5,20 +5,22 @@ using Renegade.Ui;
 namespace Renegade.Cards;
 
 /// <summary>
-/// The Style menu for card games: a row of back designs and a row of front designs (each front
-/// with its own suits and face cards). Choices are kept in GameSettings.Extra under "back" and
-/// "front" by the game.
+/// The Style menu for card games: a row of back designs, a row of front designs (each front with
+/// its own suits and face cards) and a row of table-cloth colours. Choices are kept in
+/// GameSettings.Extra under "back", "front" and "cloth" by the game.
 /// </summary>
 public partial class CardStyleMenu : Control
 {
 	public event Action<CardBack>? BackChosen;
 	public event Action<CardFront>? FrontChosen;
+	public event Action<TableCloth>? ClothChosen;
 
 	private readonly HudTheme _theme;
-	private readonly Button[] _backs = new Button[3];
-	private readonly Button[] _fronts = new Button[2];
+	private readonly Button[] _backs = new Button[Enum.GetValues<CardBack>().Length];
+	private readonly Button[] _fronts = new Button[Enum.GetValues<CardFront>().Length];
+	private readonly Button[] _cloths = new Button[Enum.GetValues<TableCloth>().Length];
 
-	public CardStyleMenu(HudTheme theme, CardBack back, CardFront front)
+	public CardStyleMenu(HudTheme theme, CardBack back, CardFront front, TableCloth cloth = TableCloth.Green)
 	{
 		_theme = theme;
 		SetAnchorsPreset(LayoutPreset.FullRect);
@@ -45,7 +47,7 @@ public partial class CardStyleMenu : Control
 			var button = Widgets.Button(CardArt.Name(b), 24, theme.ButtonDark, theme);
 			button.CustomMinimumSize = new Vector2(170, 64);
 			var choice = b;
-			button.Pressed += () => { BackChosen?.Invoke(choice); Mark(choice, null); };
+			button.Pressed += () => { BackChosen?.Invoke(choice); Mark(choice, null, null); };
 			_backs[(int)b] = button;
 			backRow.AddChild(button);
 		}
@@ -59,12 +61,26 @@ public partial class CardStyleMenu : Control
 			var button = Widgets.Button(CardArt.Name(f), 24, theme.ButtonDark, theme);
 			button.CustomMinimumSize = new Vector2(200, 64);
 			var choice = f;
-			button.Pressed += () => { FrontChosen?.Invoke(choice); Mark(null, choice); };
+			button.Pressed += () => { FrontChosen?.Invoke(choice); Mark(null, choice, null); };
 			_fronts[(int)f] = button;
 			frontRow.AddChild(button);
 		}
 		column.AddChild(frontRow);
 		column.AddChild(Widgets.Body("Every front design has its own suits and face cards.", 22, theme.TextMuted));
+
+		column.AddChild(Widgets.Label("Table cloth", 26, theme.TextMuted));
+		var clothRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+		clothRow.AddThemeConstantOverride("separation", 8);
+		foreach (TableCloth c in Enum.GetValues<TableCloth>())
+		{
+			var button = Widgets.Button(CardTable.Name(c), 20, theme.ButtonDark, theme);
+			button.CustomMinimumSize = new Vector2(104, 64);
+			var choice = c;
+			button.Pressed += () => { ClothChosen?.Invoke(choice); Mark(null, null, choice); };
+			_cloths[(int)c] = button;
+			clothRow.AddChild(button);
+		}
+		column.AddChild(clothRow);
 
 		var done = Widgets.Button("Done", 28, theme.Accent, theme);
 		done.CustomMinimumSize = new Vector2(0, 72);
@@ -75,23 +91,33 @@ public partial class CardStyleMenu : Control
 
 		_back = back;
 		_front = front;
-		Mark(back, front);
+		_cloth = cloth;
+		Mark(back, front, cloth);
 		Visible = false;
 	}
 
 	private CardBack _back;
 	private CardFront _front;
+	private TableCloth _cloth;
 
-	private void Mark(CardBack? back, CardFront? front)
+	private void Mark(CardBack? back, CardFront? front, TableCloth? cloth)
 	{
 		if (back is { } b)
 			_back = b;
 		if (front is { } f)
 			_front = f;
+		if (cloth is { } c)
+			_cloth = c;
 		for (int i = 0; i < _backs.Length; i++)
 			Widgets.Restyle(_backs[i], i == (int)_back ? _theme.Accent : _theme.ButtonDark, _theme);
 		for (int i = 0; i < _fronts.Length; i++)
 			Widgets.Restyle(_fronts[i], i == (int)_front ? _theme.Accent : _theme.ButtonDark, _theme);
+		// Each cloth button is its own colour; the chosen one is outlined in the accent.
+		for (int i = 0; i < _cloths.Length; i++)
+		{
+			var colour = CardTable.ClothColour((TableCloth)i).Lightened(0.15f);
+			Widgets.Restyle(_cloths[i], i == (int)_cloth ? _theme.Accent : colour, _theme);
+		}
 	}
 
 	public void Open() => Widgets.FadeIn(this);

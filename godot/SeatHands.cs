@@ -17,35 +17,74 @@ public sealed class SeatHands
 	private readonly Node3D _world;
 	private readonly CardSounds _sounds;
 	private readonly Transform3D _seat;
+	private readonly Vector3? _rest;
 
-	public SeatHands(Node3D world, CardSounds sounds, Transform3D seat, Color tint)
+	/// <summary>
+	/// <paramref name="rest"/> is where the working hand lies palm down on the felt between jobs (the
+	/// seat's place setting); without one it waits in the air beside the fan. Games where nobody
+	/// holds a hand of cards (War) leave out the holding hand.
+	/// </summary>
+	public SeatHands(Node3D world, CardSounds sounds, Transform3D seat, Color tint, Vector3? rest = null, bool holds = true)
 	{
 		_world = world;
 		_sounds = sounds;
 		_seat = seat;
-		Holder = new GlassHand(right: false, tint, HandPose.Hold);
-		Worker = new GlassHand(right: true, tint, HandPose.Relaxed);
-		world.AddChild(Holder);
+		_rest = rest;
+		if (holds)
+		{
+			Holder = new GlassHand(right: false, tint, HandPose.Hold);
+			world.AddChild(Holder);
+			Holder.GlobalTransform = HoldingPose;
+		}
+		Worker = new GlassHand(right: true, tint, rest != null ? HandPose.Rest : HandPose.Relaxed);
 		world.AddChild(Worker);
 		Worker.WarmUp();
-		Holder.GlobalTransform = HoldingPose;
 		Worker.GlobalTransform = RestingPose;
 	}
 
-	/// <summary>The left hand, holding the fan.</summary>
-	public GlassHand Holder { get; }
+	/// <summary>The left hand, holding the fan (none in games where no one holds cards).</summary>
+	public GlassHand? Holder { get; }
 
 	/// <summary>The right hand, which picks cards up, carries and throws them.</summary>
 	public GlassHand Worker { get; }
 
 	/// <summary>
 	/// Behind the lower left of the fan, palm towards the player, fingers reaching up and right
-	/// behind the cards, the thumb across the base where the cards are held.
+	/// behind the cards (their tips just touching the backs), the thumb across the front at the base.
 	/// </summary>
-	public Transform3D HoldingPose => _seat * new Transform3D(new Basis(Vector3.Back, -0.45f) * new Basis(Vector3.Right, -0.2f), new Vector3(-0.3f, 0.05f, -0.07f));
+	public Transform3D HoldingPose => _seat * new Transform3D(new Basis(Vector3.Back, -0.45f) * new Basis(Vector3.Right, -0.2f), new Vector3(-0.3f, 0.05f, -0.2f));
 
-	/// <summary>Down to the player's right of the fan, relaxed.</summary>
-	public Transform3D RestingPose => _seat * new Transform3D(new Basis(Vector3.Back, 0.35f), new Vector3(1.4f, -0.6f, 0.05f));
+	/// <summary>
+	/// Palm down on the felt at the seat's place, fingers towards the middle of the table (or, with
+	/// no place, down to the player's right of the fan, relaxed).
+	/// </summary>
+	public Transform3D RestingPose
+	{
+		get
+		{
+			if (_rest is not { } rest)
+				return _seat * new Transform3D(new Basis(Vector3.Back, 0.35f), new Vector3(1.4f, -0.6f, 0.05f));
+			var fingers = (Away - PlayersRight * 0.25f).Normalized();
+			var palm = Vector3.Down;
+			var basis = new Basis(fingers.Cross(palm), fingers, palm).Orthonormalized();
+			return new Transform3D(basis, rest + Vector3.Up * 0.115f);
+		}
+	}
+
+	/// <summary>The glass colour of both hands (a speaker's turn blue, the one asked yellow).</summary>
+	public Color Tint
+	{
+		get => Worker.Tint;
+		set
+		{
+			if (Holder != null)
+				Holder.Tint = value;
+			Worker.Tint = value;
+		}
+	}
+
+	/// <summary>The player's right, along the felt.</summary>
+	private Vector3 PlayersRight => Away.Cross(Vector3.Up).Normalized();
 
 	/// <summary>The direction from this seat towards the middle of the table, along the felt.</summary>
 	private Vector3 Away
@@ -116,7 +155,7 @@ public sealed class SeatHands
 		// Start listening before letting go: the cards may land before the fingers open.
 		var down = last != null ? Await(last) : Task.CompletedTask;
 		await Worker.Pinch(false);
-		CardMotion.Fly(Worker, RestingPose, 0.32f, lift: 0.1f);
+		GoRest();
 		await down;
 	}
 
@@ -146,13 +185,22 @@ public sealed class SeatHands
 		// Start listening before letting go: the cards may land before the fingers open.
 		var down = last != null ? Await(last) : Task.CompletedTask;
 		await Worker.Pinch(false);
-		CardMotion.Fly(Worker, RestingPose, 0.32f, lift: 0.1f);
+		GoRest();
 		await down;
+	}
+
+	/// <summary>Back to rest: the hand flies home and, at a place on the felt, lays itself flat.</summary>
+	private void GoRest()
+	{
+		var flight = CardMotion.Fly(Worker, RestingPose, 0.32f, lift: 0.1f);
+		if (_rest != null)
+			flight.TweenCallback(Callable.From(() => Worker.Pose = HandPose.Rest));
 	}
 
 	/// <summary>Reaches for the first card, pinches it, and takes the others along (fixed to the hand).</summary>
 	private async Task PickUp(IReadOnlyList<Card3D> cards)
 	{
+		Worker.Pose = HandPose.Relaxed;
 		await Await(CardMotion.Fly(Worker, GrabFor(cards[0]), 0.24f, lift: 0.12f));
 		await Worker.Pinch(true);
 		foreach (var card in cards)
@@ -168,7 +216,7 @@ public sealed class SeatHands
 	/// <summary>Puts the working hand back at rest at once (a new deal).</summary>
 	public void Reset()
 	{
-		Worker.Pose = HandPose.Relaxed;
+		Worker.Pose = _rest != null ? HandPose.Rest : HandPose.Relaxed;
 		Worker.GlobalTransform = RestingPose;
 		foreach (var child in Worker.GetChildren())
 			if (child is Card3D card)

@@ -42,7 +42,8 @@ public abstract partial class CardGame : Node3D
 
 	private CardStyleMenu _styleMenu = null!;
 	private AdSchedule? _adSchedule;
-	private readonly Label3D[] _bubbles = new Label3D[CardTable.MaxSeats];
+	private TableTalk? _talk;
+	private int _talkToken;
 	private Flames? _fire;
 	private string? _art;
 	private bool _handCheck;
@@ -86,6 +87,9 @@ public abstract partial class CardGame : Node3D
 
 	/// <summary>Whether your fan sorts itself by rank (games that arrange it themselves, like gin, say no).</summary>
 	protected virtual bool SortYourHand => true;
+
+	/// <summary>Whether players hold their cards in the left hand (War's piles need only the right).</summary>
+	protected virtual bool HoldsFan => true;
 
 	protected virtual string NewGameText => "Deal again";
 
@@ -149,25 +153,11 @@ public abstract partial class CardGame : Node3D
 				Fans[s] = s == 0
 					? new CardFan(Table.FanPivot[0], sorted: SortYourHand)
 					: new CardFan(Table.FanPivot[s], sorted: false) { Radius = 0.5f, Spread = 9f, MaxArc = 80f };
-				Hands[s] = new SeatHands(this, Sounds, Table.FanPivot[s], GlassTint);
+				Hands[s] = new SeatHands(this, Sounds, Table.FanPivot[s], GlassTint, Table.HandRest[s], HoldsFan);
 			}
 		}
-		for (int s = 0; s < (Solitaire ? 1 : Players); s++)
-		{
-			_bubbles[s] = new Label3D
-			{
-				FontSize = 88,
-				PixelSize = 0.0042f,
-				OutlineSize = 22,
-				OutlineModulate = new Color(0.08f, 0.05f, 0.03f, 0.9f),
-				Modulate = Bright,
-				Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
-				NoDepthTest = true,
-				Position = Table.Bubble[s],
-				Visible = false,
-			};
-			AddChild(_bubbles[s]);
-		}
+		Table.SetCloth(Saved("cloth", TableCloth.Green));
+		ApplySpeed();
 
 		_adSchedule ??= new AdSchedule(Settings.GamesSinceAd);
 		var theme = HudTheme.Warm;
@@ -176,6 +166,8 @@ public abstract partial class CardGame : Node3D
 		AddChild(Hud);
 		Hud.Build(new HudOptions(Title, Hint, Modes: false, LevelOnly: HasLevels, NewGameText: NewGameText,
 			FreezeSetting: false, CustomStyle: () => _styleMenu.Open()), Settings);
+		_talk = new TableTalk { KeepRounds = TalkRounds };
+		Hud.AddChild(_talk);
 		Hud.NewGamePressed += OnNewGamePressed;
 		Hud.RestartPressed += OnRestartPressed;
 		Hud.SetTutorial(TutorialPages);
@@ -199,11 +191,19 @@ public abstract partial class CardGame : Node3D
 				GetTree().ReloadCurrentScene();
 			});
 		}
+		var speeds = new[] { 1, 2, 3 };
+		Hud.AddChoice("Speed", new[] { "Normal", "2×", "3×" }, System.Array.IndexOf(speeds, Speed) is int at and >= 0 ? at : 0, choice =>
+		{
+			Settings.Extra["speed"] = speeds[choice].ToString();
+			Settings.Save();
+			ApplySpeed();
+		});
 		AddSettings();
 
-		_styleMenu = new CardStyleMenu(theme, Looks.Back, Looks.Front);
+		_styleMenu = new CardStyleMenu(theme, Looks.Back, Looks.Front, Saved("cloth", TableCloth.Green));
 		_styleMenu.BackChosen += back => { _ = Looks.SetBack(this, back); Save("back", back); };
 		_styleMenu.FrontChosen += front => { _ = Looks.SetFront(this, front); Save("front", front); };
+		_styleMenu.ClothChosen += cloth => { Table.SetCloth(cloth); Save("cloth", cloth); };
 		Hud.AddChild(_styleMenu);
 		if (!Demo)
 			Hud.OfferTutorialOnce(Settings);
@@ -255,22 +255,77 @@ public abstract partial class CardGame : Node3D
 		Settings.Save();
 	}
 
-	/// <summary>Shows a speech bubble over a seat (null hides it).</summary>
-	protected void Say(int seat, string? text)
+	// ------------------------------------------------------------------ Talk at the table
+
+	/// <summary>Deep blue: the hands of whoever is speaking.</summary>
+	public static readonly Color SpeakingTint = new(0.25f, 0.42f, 1f);
+
+	/// <summary>Deep yellow: the hands of whoever is being spoken to.</summary>
+	public static readonly Color AskedTint = new(1f, 0.78f, 0.12f);
+
+	/// <summary>How many rounds of talk the dialogue log keeps (two hands, by default).</summary>
+	protected virtual int TalkRounds => 2;
+
+	/// <summary>A player's name as the log shows it ("You" for seat 0).</summary>
+	protected virtual string NameOf(int seat) => seat == 0 ? "You" : Names[seat];
+
+	/// <summary>
+	/// Something a player says, into the dialogue log under their name in their colour. Their hands
+	/// turn deep blue while they speak; give <paramref name="to"/> and that player's turn deep
+	/// yellow (who's asking whom, at a glance). Null text does nothing (kept for older calls).
+	/// </summary>
+	protected void Say(int seat, string? text, int? to = null)
 	{
-		var bubble = _bubbles[seat];
-		if (bubble == null)
+		if (text == null || _talk == null)
 			return;
-		bubble.Visible = text != null;
-		bubble.Text = text ?? "";
+		_talk.Add(NameOf(seat), TableTalk.SeatColour(seat), text, Round);
+		DevLog.Write($"say: {NameOf(seat)}{(to is { } t ? " to " + NameOf(t) : "")}: {text}");
+		for (int s = 0; s < CardTable.MaxSeats; s++)
+			if (Hands[s] != null)
+				Hands[s].Tint = s == seat ? SpeakingTint : s == to ? AskedTint : GlassTint;
+		int token = ++_talkToken;
+		GetTree().CreateTimer(to != null ? 3.5f : 2f).Timeout += () =>
+		{
+			if (token == _talkToken)
+				SayNone();
+		};
 	}
 
+	/// <summary>The table's own news in the log (who took a trick, a card turned): no name, in italics.</summary>
+	protected void News(string text)
+	{
+		_talk?.Add(null, Muted, text, Round, news: true);
+		DevLog.Write($"news: {text}");
+	}
+
+	/// <summary>Everyone's hands back to clear glass (the log keeps what was said).</summary>
 	protected void SayNone()
 	{
-		foreach (var bubble in _bubbles)
-			if (bubble != null)
-				bubble.Visible = false;
+		_talkToken++;
+		for (int s = 0; s < CardTable.MaxSeats; s++)
+			if (Hands[s] != null)
+				Hands[s].Tint = GlassTint;
 	}
+
+	// ------------------------------------------------------------------ Speed
+
+	/// <summary>The chosen play speed (Settings › Speed): 1, 2 or 3 times as fast.</summary>
+	protected int Speed => Settings.Extra.TryGetValue("speed", out var s) && int.TryParse(s, out int n) && n is 1 or 2 or 3 ? n : 1;
+
+	private float _boost = 1;
+
+	/// <summary>An extra speed-up the game asks for on top of Settings (Old Maid when only the computers are left).</summary>
+	protected float SpeedBoost
+	{
+		get => _boost;
+		set
+		{
+			_boost = value;
+			ApplySpeed();
+		}
+	}
+
+	private void ApplySpeed() => Engine.TimeScale = Speed * _boost;
 
 	/// <summary>"You" or a computer player's name.</summary>
 	protected static string Who(int seat) => seat == 0 ? "you" : Names[seat];
@@ -281,6 +336,7 @@ public abstract partial class CardGame : Node3D
 		_fire?.Extinguish();
 		_fire = null;
 		SayNone();
+		_talk?.Prune(Round);
 		for (int s = 0; s < CardTable.MaxSeats; s++)
 		{
 			Hands[s]?.Reset();
@@ -472,6 +528,9 @@ public abstract partial class CardGame : Node3D
 	}
 
 	// ------------------------------------------------------------------ Input and the round's buttons
+
+	/// <summary>The level can only change between games: its button is locked while one is under way.</summary>
+	public override void _Process(double delta) => Hud?.SetModesLocked(HasLevels && !Demo && InProgress);
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
