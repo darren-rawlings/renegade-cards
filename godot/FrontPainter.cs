@@ -26,6 +26,11 @@ internal static class FrontPainter
 		CardArt.RoundedRect(c, body, 18, palette.Paper);
 		CardArt.RoundedFrame(c, body, 18, palette.Edge, 2);
 		var ink = card.IsRed ? palette.Red : palette.Black;
+		if (card.IsJoker)
+		{
+			Joker(c, origin, card.Rank == Card.BigJoker, palette, ink);
+			return;
+		}
 
 		// Corner indices: the rank with its suit below, top left and (upside down) bottom right.
 		var font = ThemeDB.FallbackFont;
@@ -225,6 +230,49 @@ internal static class FrontPainter
 	// ------------------------------------------------------------------ Face cards
 
 	/// <summary>Jacks, queens and kings: a framed panel with the design's emblem and the suit.</summary>
+	/// <summary>
+	/// A joker: "JOKER" spelled down both corners, and in the middle a jester's star in a gold ring
+	/// with BIG or LITTLE across the foot. The big joker is red, the little one black.
+	/// </summary>
+	private static void Joker(Control c, Vector2 origin, bool big, Palette palette, Color ink)
+	{
+		var font = ThemeDB.FallbackFont;
+		void Corner(Vector2 at, bool flipped)
+		{
+			c.DrawSetTransform(at, flipped ? Mathf.Pi : 0, Vector2.One);
+			const string word = "JOKER";
+			for (int i = 0; i < word.Length; i++)
+			{
+				string letter = word[i].ToString();
+				var size = font.GetStringSize(letter, HorizontalAlignment.Left, -1, 26);
+				c.DrawString(font, new Vector2(-size.X / 2, i * 25), letter, HorizontalAlignment.Left, -1, 26, ink);
+			}
+			c.DrawSetTransform(Vector2.Zero, 0, Vector2.One);
+		}
+		Corner(origin + new Vector2(30, 46), false);
+		Corner(origin + new Vector2(CardArt.CellWidth - 30, CardArt.CellHeight - 46), true);
+
+		var centre = origin + new Vector2(CardArt.CellWidth / 2f, CardArt.CellHeight / 2f - 12);
+		c.DrawCircle(centre, 66, palette.Panel);
+		c.DrawArc(centre, 66, 0, Mathf.Tau, 64, palette.Gold, 4, true);
+		// A five-pointed star with a smaller one inside it.
+		Vector2[] Star(float outer, float inner)
+		{
+			var points = new Vector2[10];
+			for (int i = 0; i < 10; i++)
+			{
+				float a = -Mathf.Pi / 2 + i * Mathf.Pi / 5;
+				points[i] = centre + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (i % 2 == 0 ? outer : inner);
+			}
+			return points;
+		}
+		c.DrawColoredPolygon(Star(52, 22), ink);
+		c.DrawColoredPolygon(Star(24, 10), palette.Gold);
+		string label = big ? "BIG" : "LITTLE";
+		var labelSize = font.GetStringSize(label, HorizontalAlignment.Left, -1, 28);
+		c.DrawString(font, new Vector2(centre.X - labelSize.X / 2, centre.Y + 112), label, HorizontalAlignment.Left, -1, 28, ink);
+	}
+
 	private static void FacePanel(Control c, Vector2 origin, Card card, CardFront front, Palette palette, Color ink)
 	{
 		var panel = new Rect2(origin + new Vector2(62, 52), new Vector2(CardArt.CellWidth - 124, CardArt.CellHeight - 104));

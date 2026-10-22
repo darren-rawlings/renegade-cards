@@ -14,7 +14,7 @@ public enum CardBack { Crimson, Navy, Emerald }
 /// <summary>
 /// Draws every card in code (no licensed art): a front design (paper, ink colours, suit symbols,
 /// face-card emblems) and a back design. All 52 fronts are painted in one pass into an atlas
-/// (13 × 4 cells), and each back into one cell; the 3D cards sample their cell.
+/// (13 × 4 cells, plus a fifth row with the two jokers), and each back into one cell; the 3D cards sample their cell.
 /// </summary>
 public static partial class CardArt
 {
@@ -22,14 +22,17 @@ public static partial class CardArt
 	/// <summary>Transparent margin inside each cell, so mipmaps don't bleed between neighbours.</summary>
 	public const int Inset = 8;
 
+	/// <summary>Rows in the fronts atlas: the four suits and the jokers.</summary>
+	public const int AtlasRows = 5;
+
 	public static string Name(CardFront front) => front switch { CardFront.Ocean => "Ocean", _ => "Classic" };
 	public static string Name(CardBack back) => back.ToString();
 
-	/// <summary>Paints the 52 fronts into one atlas texture (columns: ace to king; rows: clubs, diamonds, hearts, spades).</summary>
+	/// <summary>Paints the 52 fronts and the two jokers into one atlas texture (columns: ace to king; rows: clubs, diamonds, hearts, spades, then the jokers).</summary>
 	public static Task<ImageTexture> PaintFronts(Node host, CardFront front) =>
-		Paint(host, new Vector2I(CellWidth * 13, CellHeight * 4), canvas =>
+		Paint(host, new Vector2I(CellWidth * 13, CellHeight * AtlasRows), canvas =>
 		{
-			for (int i = 0; i < 52; i++)
+			for (int i = 0; i < 54; i++)
 			{
 				var card = Card.FromOrdinal(i);
 				var origin = new Vector2(i % 13 * CellWidth, i / 13 * CellHeight);

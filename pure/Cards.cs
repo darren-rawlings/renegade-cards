@@ -11,17 +11,25 @@ public readonly record struct Card(int Rank, Suit Suit)
 {
 	public const int Ace = 1, Jack = 11, Queen = 12, King = 13;
 
-	public bool IsRed => Suit is Suit.Hearts or Suit.Diamonds;
+	/// <summary>The jokers some games add (Spades house rules): ranks past the king, filed under spades.</summary>
+	public const int LittleJoker = 14, BigJoker = 15;
 
-	public bool IsFace => Rank >= Jack;
+	public static Card Joker(bool big) => new(big ? BigJoker : LittleJoker, Suit.Spades);
+
+	public bool IsJoker => Rank >= LittleJoker;
+
+	/// <summary>Red for hearts and diamonds (and the big joker).</summary>
+	public bool IsRed => IsJoker ? Rank == BigJoker : Suit is Suit.Hearts or Suit.Diamonds;
+
+	public bool IsFace => Rank is >= Jack and <= King;
 
 	/// <summary>The corner index: A, 2 … 10, J, Q, K.</summary>
 	public string Index => RankIndex(Rank);
 
-	/// <summary>Position in a full deck (0–51), suit by suit, ace to king.</summary>
-	public int Ordinal => (int)Suit * 13 + Rank - 1;
+	/// <summary>Position in a full deck (0–51), suit by suit, ace to king; the jokers are 52 and 53.</summary>
+	public int Ordinal => IsJoker ? 52 + Rank - LittleJoker : (int)Suit * 13 + Rank - 1;
 
-	public static Card FromOrdinal(int ordinal) => new(ordinal % 13 + 1, (Suit)(ordinal / 13));
+	public static Card FromOrdinal(int ordinal) => ordinal >= 52 ? new(LittleJoker + ordinal - 52, Suit.Spades) : new(ordinal % 13 + 1, (Suit)(ordinal / 13));
 
 	public static string RankIndex(int rank) => rank switch
 	{
@@ -29,6 +37,7 @@ public readonly record struct Card(int Rank, Suit Suit)
 		Jack => "J",
 		Queen => "Q",
 		King => "K",
+		LittleJoker or BigJoker => "★",
 		_ => rank.ToString(),
 	};
 
@@ -50,12 +59,14 @@ public readonly record struct Card(int Rank, Suit Suit)
 			Jack => "Jack",
 			Queen => "Queen",
 			King => "King",
+			LittleJoker => "Little Joker",
+			BigJoker => "Big Joker",
 			_ => throw new ArgumentOutOfRangeException(nameof(rank)),
 		};
 		return plural ? (rank == 6 ? "Sixes" : name + "s") : name;
 	}
 
-	public override string ToString() => Index + Suit switch
+	public override string ToString() => IsJoker ? (Rank == BigJoker ? "Big Joker" : "Little Joker") : Index + Suit switch
 	{
 		Suit.Clubs => "♣",
 		Suit.Diamonds => "♦",

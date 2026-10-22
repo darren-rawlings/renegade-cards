@@ -11,17 +11,17 @@ namespace Renegade.Cards;
 public sealed class CardLooks
 {
 	private static Shader? _shader;
-	private readonly ShaderMaterial[] _fronts = new ShaderMaterial[52];
+	private readonly ShaderMaterial[] _fronts = new ShaderMaterial[54];
 	private readonly ShaderMaterial _back = Make(+1);
 
 	private CardLooks()
 	{
 		_back.SetShaderParameter("side", -1f);
-		for (int i = 0; i < 52; i++)
+		for (int i = 0; i < 54; i++)
 		{
 			_fronts[i] = Make(+1);
-			_fronts[i].SetShaderParameter("uv_scale", new Vector2(1 / 13f, 1 / 4f));
-			_fronts[i].SetShaderParameter("uv_offset", new Vector2(i % 13 / 13f, i / 13 / 4f));
+			_fronts[i].SetShaderParameter("uv_scale", new Vector2(1 / 13f, 1f / CardArt.AtlasRows));
+			_fronts[i].SetShaderParameter("uv_offset", new Vector2(i % 13 / 13f, (float)(i / 13) / CardArt.AtlasRows));
 		}
 	}
 
