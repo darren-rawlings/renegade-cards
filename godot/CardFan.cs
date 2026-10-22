@@ -56,6 +56,14 @@ public sealed class CardFan
 
 	public IEnumerable<Card3D> OfRank(int rank) => _cards.Where(c => c.Card.Rank == rank).ToList();
 
+	/// <summary>Puts an unsorted fan's cards in a new order (a player shuffling their hand); call Settle after.</summary>
+	public void Reorder(IEnumerable<Card3D> order)
+	{
+		var wanted = order.Where(_cards.Contains).ToList();
+		_cards.Clear();
+		_cards.AddRange(wanted);
+	}
+
 	/// <summary>Lifts every card of a rank a little out of the fan (the ones being asked about), or lowers them.</summary>
 	public void Raise(int rank, bool raised)
 	{
