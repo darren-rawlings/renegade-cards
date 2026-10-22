@@ -37,7 +37,7 @@ public sealed class Dealer
 	}
 
 	/// <summary>Where the shuffle happens: lifted off the felt and brought towards the near player.</summary>
-	private static Vector3 Spot(Vector3 at) => at + new Vector3(0, 1.55f, 2.35f);
+	private static Vector3 Spot(Vector3 at) => at + new Vector3(0, 3.2f, 3.35f);
 
 	/// <summary>The deck turned sideways (its long edge to the player) and tilted up to face them.</summary>
 	private static Basis Sideways(float tilt = 0.55f) => new Basis(Vector3.Right, -tilt) * new Basis(Vector3.Up, Mathf.Pi / 2) * Card3D.FaceDown();
