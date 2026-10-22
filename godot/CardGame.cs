@@ -81,6 +81,9 @@ public abstract partial class CardGame : Node3D
 	/// <summary>A solitaire layout: the camera looks more steeply down on a wider felt, with no seats.</summary>
 	protected virtual bool Solitaire => false;
 
+	/// <summary>How wide a solitaire layout is, in table units (Spider's ten piles want more than Klondike's seven).</summary>
+	protected virtual float LayoutWidth => 5.3f;
+
 	/// <summary>Whether your fan sorts itself by rank (games that arrange it themselves, like gin, say no).</summary>
 	protected virtual bool SortYourHand => true;
 
@@ -131,7 +134,7 @@ public abstract partial class CardGame : Node3D
 
 	private async Task Start()
 	{
-		Table = new CardTable { Seats = Solitaire ? 1 : Players, Solitaire = Solitaire };
+		Table = new CardTable { Seats = Solitaire ? 1 : Players, Solitaire = Solitaire, SolitaireWidth = LayoutWidth };
 		AddChild(Table);
 		var pool = new SoundPool();
 		AddChild(pool);
