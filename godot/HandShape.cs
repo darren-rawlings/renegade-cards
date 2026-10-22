@@ -4,14 +4,23 @@ using Godot;
 
 namespace Renegade.Cards;
 
-/// <summary>How a hand is posed: how far each finger curls at each joint, and where the thumb points.</summary>
-public sealed record HandPose(float[] Curl, float ThumbAcross, float ThumbCurl, float[] Splay)
+/// <summary>
+/// How a hand is posed: how far each finger (index, middle, ring, little) curls at each of its
+/// three joints, how the fingers spread, and where the thumb goes. A pinch brings the thumb tip
+/// to the index fingertip.
+/// </summary>
+public sealed record HandPose(string Name, float[][] Curl, float ThumbAcross, float ThumbCurl, float[] Splay, bool ThumbToIndex = false)
 {
-	/// <summary>Loose and natural: the working hand, reaching and carrying.</summary>
-	public static readonly HandPose Relaxed = new(new[] { 14f, 20f, 12f }, 0.15f, 18f, new[] { -9f, -1f, 6f, 13f });
+	private static float[] C(float a, float b, float c) => new[] { a, b, c };
+
+	/// <summary>Loose and natural: the working hand at rest and reaching.</summary>
+	public static readonly HandPose Relaxed = new("relaxed", new[] { C(14, 20, 12), C(14, 20, 12), C(15, 21, 12), C(17, 24, 14) }, 0.15f, 18f, new[] { -9f, -1f, 6f, 13f });
 
 	/// <summary>Holding a fan of cards: fingers behind the cards, the thumb pressed across the front.</summary>
-	public static readonly HandPose Hold = new(new[] { 26f, 34f, 22f }, 0.7f, 26f, new[] { -6f, 0f, 4f, 9f });
+	public static readonly HandPose Hold = new("hold", new[] { C(26, 34, 22), C(26, 34, 22), C(27, 35, 22), C(30, 39, 25) }, 0.7f, 26f, new[] { -6f, 0f, 4f, 9f });
+
+	/// <summary>Picking up a card: thumb and index finger together, the other fingers tucked out of the way.</summary>
+	public static readonly HandPose Pinch = new("pinch", new[] { C(40, 44, 18), C(46, 62, 38), C(50, 66, 40), C(54, 70, 42) }, 0.6f, 12f, new[] { -3f, 1f, 6f, 11f }, ThumbToIndex: true);
 }
 
 /// <summary>
@@ -20,8 +29,9 @@ public sealed record HandPose(float[] Curl, float ThumbAcross, float ThumbCurl, 
 /// pads at the base of the thumb and little finger, a wrist, four fingers of three tapering
 /// segments and a thumb, melted together where they meet (but not finger to finger). The surface
 /// is then extracted with surface nets and given normals from the field, so it shades smoothly.
-/// Local frame: palm centre at the origin, fingers along +Y, palm facing +Z, and (for a left
-/// hand) the thumb on the +X side. Vertex colour alpha fades the wrist out.
+/// Local frame: palm centre at the origin, fingers along +Y, palm facing +Z. The model is a
+/// right hand: seen palm-on, its thumb is on the viewer's right (+X); left hands are mirrored.
+/// Vertex colour alpha fades the wrist out.
 /// </summary>
 public static class HandShape
 {
@@ -33,62 +43,94 @@ public static class HandShape
 		public readonly Vector3 A, B;
 		public readonly float Ra, Rb;
 		public Bone(Vector3 a, Vector3 b, float ra, float rb) { A = a; B = b; Ra = ra; Rb = rb; }
+
+		public static Bone Lerp(Bone x, Bone y, float t) => new(x.A.Lerp(y.A, t), x.B.Lerp(y.B, t), Mathf.Lerp(x.Ra, y.Ra, t), Mathf.Lerp(x.Rb, y.Rb, t));
 	}
 
-	private static readonly Dictionary<(HandPose, bool), ArrayMesh> Cache = new();
+	private static readonly Dictionary<(string, string, int, bool), ArrayMesh> Cache = new();
 
-	/// <summary>The mesh for a pose; a right hand is the left hand mirrored. Built once, then cached.</summary>
-	public static ArrayMesh Mesh(HandPose pose, bool right)
+	/// <summary>The mesh for a pose. Built once, then cached.</summary>
+	public static ArrayMesh Mesh(HandPose pose, bool right) => Mesh(pose, pose, 0, right);
+
+	/// <summary>The mesh part of the way from one pose to another (t from 0 to 1), for animating between them.</summary>
+	public static ArrayMesh Mesh(HandPose from, HandPose to, float t, bool right)
 	{
-		if (Cache.TryGetValue((pose, right), out var mesh))
+		var key = (from.Name, to.Name, (int)Mathf.Round(t * 100), right);
+		if (Cache.TryGetValue(key, out var mesh))
 			return mesh;
-		var left = Cache.TryGetValue((pose, false), out var l) ? l : Cache[(pose, false)] = Build(pose, mirror: false);
-		if (!right)
-			return left;
-		return Cache[(pose, true)] = Build(pose, mirror: true);
+		var a = Digits(from);
+		var b = Digits(to);
+		var blend = new List<Bone[]>();
+		for (int d = 0; d < a.Count; d++)
+		{
+			var bones = new Bone[a[d].Length];
+			for (int s = 0; s < bones.Length; s++)
+				bones[s] = Bone.Lerp(a[d][s], b[d][s], t);
+			blend.Add(bones);
+		}
+		return Cache[key] = Build(new Field(blend), mirror: !right);
+	}
+
+	/// <summary>Where a pinched card sits, between the thumb and index fingertips, in the hand's frame (table units).</summary>
+	public static Vector3 PinchPoint(bool right)
+	{
+		var digits = Digits(HandPose.Pinch);
+		var point = (digits[0][2].B + digits[4][2].B) / 2 * UnitsPerCm;
+		return right ? point : new Vector3(-point.X, point.Y, point.Z);
 	}
 
 	// ------------------------------------------------------------------ The hand, as a field
 
-	private sealed class Field
+	/// <summary>The bones of a pose: index, middle, ring and little fingers, then the thumb (three each).</summary>
+	private static List<Bone[]> Digits(HandPose pose)
 	{
-		public readonly List<Bone[]> Digits = new();
-
-		public Field(HandPose pose)
+		var digits = new List<Bone[]>();
+		float[] baseX = { 2.85f, 0.95f, -0.95f, -2.8f };
+		float[] baseY = { 4.4f, 4.7f, 4.45f, 3.9f };
+		float[][] lengths = { new[] { 4.0f, 2.4f, 2.0f }, new[] { 4.5f, 2.8f, 2.1f }, new[] { 4.2f, 2.6f, 2.0f }, new[] { 3.3f, 1.9f, 1.8f } };
+		float[] radius = { 0.93f, 0.98f, 0.9f, 0.8f };
+		for (int f = 0; f < 4; f++)
 		{
-			// Fingers: index (nearest the thumb), middle, ring, little.
-			float[] baseX = { 2.85f, 0.95f, -0.95f, -2.8f };
-			float[] baseY = { 4.4f, 4.7f, 4.45f, 3.9f };
-			float[][] lengths = { new[] { 4.0f, 2.4f, 2.0f }, new[] { 4.5f, 2.8f, 2.1f }, new[] { 4.2f, 2.6f, 2.0f }, new[] { 3.3f, 1.9f, 1.8f } };
-			float[] radius = { 0.93f, 0.98f, 0.9f, 0.8f };
-			for (int f = 0; f < 4; f++)
+			var dir = new Basis(Vector3.Back, Mathf.DegToRad(pose.Splay[f])) * Vector3.Up;
+			var at = new Vector3(baseX[f], baseY[f], 0.1f);
+			float r = radius[f];
+			var bones = new Bone[3];
+			for (int s = 0; s < 3; s++)
 			{
-				var dir = new Basis(Vector3.Back, Mathf.DegToRad(pose.Splay[f])) * Vector3.Up;
-				var at = new Vector3(baseX[f], baseY[f], 0.1f);
-				float r = radius[f];
-				var bones = new Bone[3];
-				for (int s = 0; s < 3; s++)
-				{
-					// Each joint bends the finger towards the palm side (+Z).
-					var axis = dir.Cross(Vector3.Back).Normalized();
-					dir = dir.Rotated(axis, -Mathf.DegToRad(pose.Curl[s] * (f == 3 ? 1.15f : 1f)));
-					float rEnd = r * (s == 2 ? 0.78f : 0.9f);
-					var end = at + dir * lengths[f][s];
-					bones[s] = new Bone(at, end, r, rEnd);
-					at = end;
-					r = rEnd;
-				}
-				Digits.Add(bones);
+				// Each joint bends the finger towards the palm (+Z).
+				var axis = dir.Cross(Vector3.Back).Normalized();
+				dir = dir.Rotated(axis, Mathf.DegToRad(pose.Curl[f][s]));
+				float rEnd = r * (s == 2 ? 0.78f : 0.9f);
+				var end = at + dir * lengths[f][s];
+				bones[s] = new Bone(at, end, r, rEnd);
+				at = end;
+				r = rEnd;
 			}
+			digits.Add(bones);
+		}
 
-			// The thumb: from the heel of the hand on the thumb side, out and up; the more
-			// "across", the more it swings over the palm and forward.
-			var thumbBase = new Vector3(2.9f, -2.4f, 0.7f);
+		var thumbBase = new Vector3(2.9f, -2.4f, 0.7f);
+		float[] tLen = { 4.0f, 3.0f, 2.5f };
+		float[] tRad = { 1.3f, 1.08f, 0.94f };
+		var thumb = new Bone[3];
+		if (pose.ThumbToIndex)
+		{
+			// A pinch: the thumb arcs out in front of the palm to meet the index fingertip.
+			var index = digits[0][2];
+			var towards = (thumbBase - index.B).Normalized();
+			var tip = index.B + towards * (index.Rb + tRad[2] * 0.82f) * 0.85f;
+			var bulge = (thumbBase + tip) / 2 + new Vector3(0.9f, 0, 2.2f);
+			Vector3 At(float t) => thumbBase * (1 - t) * (1 - t) + bulge * 2 * t * (1 - t) + tip * t * t;
+			float[] ts = { 0, 0.42f, 0.74f, 1 };
+			for (int s = 0; s < 3; s++)
+				thumb[s] = new Bone(At(ts[s]), At(ts[s + 1]), tRad[s], s == 2 ? tRad[s] * 0.82f : tRad[s + 1]);
+		}
+		else
+		{
+			// From the heel of the hand on the thumb side, out and up; the more "across", the more
+			// it swings over the palm and forward.
 			var tdir = new Vector3(0.72f - 0.55f * pose.ThumbAcross, 0.64f, 0.28f + 0.45f * pose.ThumbAcross).Normalized();
-			float[] tLen = { 4.0f, 3.0f, 2.5f };
-			float[] tRad = { 1.3f, 1.08f, 0.94f };
 			var tAt = thumbBase;
-			var thumb = new Bone[3];
 			for (int s = 0; s < 3; s++)
 			{
 				if (s > 0)
@@ -100,8 +142,16 @@ public static class HandShape
 				thumb[s] = new Bone(tAt, end, tRad[s], s == 2 ? tRad[s] * 0.82f : tRad[Math.Min(s + 1, 2)]);
 				tAt = end;
 			}
-			Digits.Add(thumb);
 		}
+		digits.Add(thumb);
+		return digits;
+	}
+
+	private sealed class Field
+	{
+		public readonly List<Bone[]> Digits;
+
+		public Field(List<Bone[]> digits) => Digits = digits;
 
 		public float Distance(Vector3 p)
 		{
@@ -165,9 +215,8 @@ public static class HandShape
 
 	// ------------------------------------------------------------------ Surface nets
 
-	private static ArrayMesh Build(HandPose pose, bool mirror)
+	private static ArrayMesh Build(Field field, bool mirror)
 	{
-		var field = new Field(pose);
 		const float step = 0.28f;
 		var min = new Vector3(-6.5f, -13.5f, -4f);
 		var max = new Vector3(12f, 15.5f, 11.5f);
