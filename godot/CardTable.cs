@@ -118,10 +118,10 @@ public partial class CardTable : Node3D
 	{
 		new Vector2[0],
 		new Vector2[0],
-		new[] { new Vector2(0, -2.75f) },
-		new[] { new Vector2(-1.2f, -2.6f), new Vector2(1.2f, -2.6f) },
-		new[] { new Vector2(-1.85f, -0.95f), new Vector2(0, -2.75f), new Vector2(1.85f, -0.95f) },
-		new[] { new Vector2(-1.85f, -0.7f), new Vector2(-1.0f, -2.7f), new Vector2(1.0f, -2.7f), new Vector2(1.85f, -0.7f) },
+		new[] { new Vector2(0, -2.5f) },
+		new[] { new Vector2(-1.2f, -2.4f), new Vector2(1.2f, -2.4f) },
+		new[] { new Vector2(-1.85f, -0.95f), new Vector2(0, -2.5f), new Vector2(1.85f, -0.95f) },
+		new[] { new Vector2(-1.85f, -0.7f), new Vector2(-1.0f, -2.45f), new Vector2(1.0f, -2.45f), new Vector2(1.85f, -0.7f) },
 	};
 
 	/// <summary>Seats a number of players (2 to 5) and works out every seat's places.</summary>
@@ -149,7 +149,7 @@ public partial class CardTable : Node3D
 		{
 			var at = Around[Seats][s - 1];
 			bool side = Mathf.Abs(at.X) > 1.5f;
-			var fan = new Vector3(at.X, side ? 0.85f : 1.05f, at.Y);
+			var fan = new Vector3(at.X, side ? 0.8f : 0.62f, at.Y);
 			// Each fan faces its player: outward from the middle, and a little away from you so
 			// you see its backs spread rather than edge-on.
 			var outward = (at - centre).Normalized();

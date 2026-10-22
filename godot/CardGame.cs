@@ -298,6 +298,13 @@ public abstract partial class CardGame : Node3D
 		DevLog.Write($"news: {text}");
 	}
 
+
+	/// <summary>
+	/// A finished trick in the log, every card in the order played and who took it ("Rosie 2♣ ·
+	/// Max 9♣ · Lena K♣ · You 4♣ → Lena"), so any trick can be checked afterwards.
+	/// </summary>
+	protected void TrickNews(IReadOnlyList<Play> trick, int winner, string? extra = null) =>
+		News($"{string.Join(" · ", trick.Select(p => $"{NameOf(p.Seat)} {p.Card}"))} → {NameOf(winner)}{(extra != null ? ", " + extra : "")}");
 	/// <summary>Everyone's hands back to clear glass (the log keeps what was said).</summary>
 	protected void SayNone()
 	{
