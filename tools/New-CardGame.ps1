@@ -65,6 +65,8 @@ try {
 		$text = $text.Replace('Link="Shared/%(RecursiveDir)%(Filename)%(Extension)" />', "Link=`"Shared/%(RecursiveDir)%(Filename)%(Extension)`" />`r`n    <!-- The card kit's engine-free code (Card, Deck). -->`r`n    <Compile Include=`"../../addons/renegade_cards/pure/**/*.cs`" Link=`"Cards/%(RecursiveDir)%(Filename)%(Extension)`" />")
 		[IO.File]::WriteAllText($tests, $text, $utf8)
 	}
+	# The template's placeholder game: each card game writes its own Main and tutorial.
+	Remove-Item (Join-Path $dir 'src\Game\Main.cs'), (Join-Path $dir 'src\Game\Tutorial.cs') -ErrorAction SilentlyContinue
 	Remove-Item (Join-Path $dir 'src\Core\Counter.cs*'), (Join-Path $dir "tests\$CodeName.Tests\CounterTests.cs*") -ErrorAction SilentlyContinue
 	Write-Host "Ready: $dir (com.renegadegames.$PackageId), with addons/renegade_cards."
 }

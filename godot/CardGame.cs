@@ -319,13 +319,15 @@ public abstract partial class CardGame : Node3D
 	}
 
 	/// <summary>Deals cards from the top of the stack to the seats' piles, one at a time round the table.</summary>
-	protected async Task DealRound(IReadOnlyList<Card3D> cards, IReadOnlyList<int> seats)
+	protected async Task DealRound(IReadOnlyList<Card3D> cards, IReadOnlyList<int> seats, float spacing = 0)
 	{
+		if (spacing <= 0)
+			spacing = 0.6f / Math.Max(2, Players) + 0.04f;
 		Hud.SetStatus("Dealing…", Muted);
 		var onPile = new int[CardTable.MaxSeats];
 		Tween? last = null;
 		for (int j = 0; j < cards.Count; j++)
-			last = Dealer.Deal(cards[j], Table.Pile[seats[j]], onPile[seats[j]]++, delay: j * (0.6f / Math.Max(2, Players) + 0.04f));
+			last = Dealer.Deal(cards[j], Table.Pile[seats[j]], onPile[seats[j]]++, delay: j * spacing);
 		await Await(last);
 	}
 
