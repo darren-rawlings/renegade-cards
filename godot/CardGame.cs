@@ -81,6 +81,9 @@ public abstract partial class CardGame : Node3D
 	/// <summary>A solitaire layout: the camera looks more steeply down on a wider felt, with no seats.</summary>
 	protected virtual bool Solitaire => false;
 
+	/// <summary>Whether your fan sorts itself by rank (games that arrange it themselves, like gin, say no).</summary>
+	protected virtual bool SortYourHand => true;
+
 	protected virtual string NewGameText => "Deal again";
 
 	/// <summary>Adds the game's own rows to Settings (use <see cref="GameHud.AddToggle"/> and AddChoice).</summary>
@@ -141,7 +144,7 @@ public abstract partial class CardGame : Node3D
 			for (int s = 0; s < Players; s++)
 			{
 				Fans[s] = s == 0
-					? new CardFan(Table.FanPivot[0], sorted: true)
+					? new CardFan(Table.FanPivot[0], sorted: SortYourHand)
 					: new CardFan(Table.FanPivot[s], sorted: false) { Radius = 0.5f, Spread = 9f, MaxArc = 80f };
 				Hands[s] = new SeatHands(this, Sounds, Table.FanPivot[s], GlassTint);
 			}
