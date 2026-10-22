@@ -110,6 +110,17 @@ public partial class Card3D : Node3D
 	/// <summary>The meshes, for effects such as the winner's fire.</summary>
 	public MeshInstance3D[] Meshes => new[] { _front, _back };
 
+	private static StandardMaterial3D? _shade;
+
+	/// <summary>Greys the face a little (a card you can't play right now).</summary>
+	public bool Dimmed
+	{
+		get => _front.MaterialOverlay != null;
+		set => _front.MaterialOverlay = value
+			? _shade ??= new StandardMaterial3D { AlbedoColor = new Color(0.05f, 0.04f, 0.03f, 0.42f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded }
+			: null;
+	}
+
 	/// <summary>Lying on the table face down, its top pointing away from the near player.</summary>
 	public static Basis FaceDown(float yaw = 0) => new Basis(Vector3.Up, yaw) * new Basis(Vector3.Right, Mathf.Pi / 2);
 

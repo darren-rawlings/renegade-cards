@@ -14,6 +14,7 @@ public sealed class CardFan
 {
 	private readonly List<Card3D> _cards = new();
 	private readonly HashSet<int> _raised = new();
+	private readonly HashSet<Card3D> _raisedCards = new();
 
 	public CardFan(Transform3D pivot, bool sorted)
 	{
@@ -46,6 +47,7 @@ public sealed class CardFan
 	{
 		_cards.Remove(card);
 		_raised.Remove(card.Card.Rank);
+		_raisedCards.Remove(card);
 	}
 
 	public void Clear()
@@ -73,7 +75,24 @@ public sealed class CardFan
 			_raised.Remove(rank);
 	}
 
-	public void LowerAll() => _raised.Clear();
+	public void LowerAll()
+	{
+		_raised.Clear();
+		_raisedCards.Clear();
+	}
+
+	/// <summary>Lifts one card out of the fan (picked to pass, say), or lowers it.</summary>
+	public void RaiseCard(Card3D card, bool raised)
+	{
+		if (raised)
+			_raisedCards.Add(card);
+		else
+			_raisedCards.Remove(card);
+	}
+
+	public bool IsRaised(Card3D card) => _raisedCards.Contains(card);
+
+	public IReadOnlyCollection<Card3D> RaisedCards => _raisedCards;
 
 	private void Order()
 	{
@@ -105,7 +124,7 @@ public sealed class CardFan
 	{
 		Tween? last = null;
 		for (int i = 0; i < _cards.Count; i++)
-			last = CardMotion.Slide(_cards[i], Slot(i, _cards.Count, _raised.Contains(_cards[i].Card.Rank)), seconds);
+			last = CardMotion.Slide(_cards[i], Slot(i, _cards.Count, _raised.Contains(_cards[i].Card.Rank) || _raisedCards.Contains(_cards[i])), seconds);
 		return last;
 	}
 

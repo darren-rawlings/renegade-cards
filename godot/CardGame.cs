@@ -370,6 +370,53 @@ public abstract partial class CardGame : Node3D
 			await Await(CardMotion.Fly(card, target, 0.36f, lift: 0.25f, landed: () => Sounds.PlaySlap(target.Origin)));
 	}
 
+	// ------------------------------------------------------------------ Trick-taking games
+
+	/// <summary>Where a seat's card goes in the middle of the table when played to a trick.</summary>
+	protected Vector3 TrickSpot(int seat)
+	{
+		var toward = Table.Pile[seat] - Table.Centre;
+		toward.Y = 0;
+		return Table.Centre + toward.Normalized() * 0.42f + Vector3.Up * (0.003f * (seat + 1));
+	}
+
+	/// <summary>Plays a card from a seat's fan into the middle, face up, turned towards its player.</summary>
+	protected Task PlayToTrick(int seat, Card3D card)
+	{
+		var toward = Table.Pile[seat] - Table.Centre;
+		float yaw = Mathf.Atan2(toward.X, toward.Z) + ((float)Random.NextDouble() - 0.5f) * 0.2f;
+		return PlayToTable(seat, card, FaceUpAt(TrickSpot(seat), yaw));
+	}
+
+	/// <summary>
+	/// The trick's winner's hand gathers its cards and puts them face down on their pile of won
+	/// tricks (offset a little each trick, so the count shows). <paramref name="won"/> is how many
+	/// tricks they had before this one.
+	/// </summary>
+	protected async Task SweepTrick(int winner, IReadOnlyList<Card3D> trick, int won)
+	{
+		var pile = Table.Winnings[winner] + new Vector3((won % 7) * 0.05f, 0, (won / 7) * 0.12f);
+		var targets = trick.Select((_, i) => Dealer.InStack(pile, won * 4 + i, yaw: 0.25f * (won % 2))).ToList();
+		await Hands[winner].Carry(trick.OrderByDescending(n => n.GlobalPosition.Y).ToList(), targets, seconds: 0.34f, lift: 0.18f);
+	}
+
+	/// <summary>Greys the cards in your fan you can't play now (or clears it, with null).</summary>
+	protected void DimUnplayable(IEnumerable<Card>? playable)
+	{
+		var allowed = playable?.ToHashSet();
+		foreach (var node in Fans[0].Cards)
+			node.Dimmed = allowed != null && !allowed.Contains(node.Card);
+	}
+
+	/// <summary>Keeps your fan in trick-game order: by suit, high cards first.</summary>
+	protected void ArrangeBySuit()
+	{
+		var bySuit = Tricks.Sorted(Fans[0].Cards.Select(n => n.Card));
+		var lookup = Fans[0].Cards.ToDictionary(n => n.Card);
+		Fans[0].Reorder(bySuit.Select(c => lookup[c]));
+		Fans[0].Settle(0.18f);
+	}
+
 	/// <summary>A card lying face up on the felt at a point, turned a little.</summary>
 	protected static Transform3D FaceUpAt(Vector3 at, float yaw = 0) => new(Card3D.FaceUp(yaw), at);
 
