@@ -166,6 +166,10 @@ public abstract partial class CardGame : Node3D
 		AddChild(Hud);
 		Hud.Build(new HudOptions(Title, Hint, Modes: false, LevelOnly: HasLevels, NewGameText: NewGameText,
 			FreezeSetting: false, CustomStyle: () => _styleMenu.Open()), Settings);
+		// The tutorial holds play: the table pauses while it's open (the HUD keeps running).
+		Hud.ProcessMode = ProcessModeEnum.Always;
+		Hud.TutorialOpened += () => GetTree().Paused = true;
+		Hud.TutorialClosed += () => GetTree().Paused = false;
 		_talk = new TableTalk { KeepRounds = TalkRounds };
 		Hud.AddChild(_talk);
 		Hud.NewGamePressed += OnNewGamePressed;
@@ -230,7 +234,7 @@ public abstract partial class CardGame : Node3D
 		}
 	}
 
-	protected async Task Pause(float seconds) => await ToSignal(GetTree().CreateTimer(seconds), SceneTreeTimer.SignalName.Timeout);
+	protected async Task Pause(float seconds) => await ToSignal(GetTree().CreateTimer(seconds, processAlways: false), SceneTreeTimer.SignalName.Timeout);
 
 	protected async Task Await(Tween? tween)
 	{
