@@ -28,7 +28,7 @@ public abstract partial class CardGame : Node3D
 	public static readonly Color GlassTint = new(0.8f, 0.92f, 1f);
 	public static readonly string[] Names = { "You", "Rosie", "Max", "Lena", "Theo" };
 
-	protected readonly Random Random = new();
+	protected Random Random { get; private set; } = new();
 	protected readonly Scoreboard Wins = new();
 	protected GameSettings Settings = null!;
 	protected CardTable Table = null!;
@@ -672,6 +672,9 @@ public abstract partial class CardGame : Node3D
 					break;
 				case "--hands":
 					_handCheck = true;
+					break;
+				case "--seed":
+					Random = new Random(int.Parse(value));
 					break;
 				default:
 					DevArg(name, value);
