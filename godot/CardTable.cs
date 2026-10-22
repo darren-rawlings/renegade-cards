@@ -47,6 +47,9 @@ public partial class CardTable : Node3D
 	/// <summary>Where each player's working hand lies palm down between jobs, at their place.</summary>
 	public Vector3[] HandRest { get; } = new Vector3[MaxSeats];
 
+	/// <summary>Where each player's left hand lies palm down until it has cards to hold.</summary>
+	public Vector3[] HolderRest { get; } = new Vector3[MaxSeats];
+
 	/// <summary>Where each player's speech bubble shows (kept for games that still point at a seat).</summary>
 	public Vector3[] Bubble { get; } = new Vector3[MaxSeats];
 
@@ -139,6 +142,7 @@ public partial class CardTable : Node3D
 		Landing[0] = new Vector3(-1.2f, FeltY, 0.45f);
 		Bubble[0] = new Vector3(0, 1.2f, 1.3f);
 		HandRest[0] = new Vector3(1.75f, FeltY, 1.45f);
+		HolderRest[0] = new Vector3(-1.75f, FeltY, 1.45f);
 
 		foreach (var mat in _mats)
 			mat.QueueFree();
@@ -167,6 +171,8 @@ public partial class CardTable : Node3D
 			Bubble[s] = new Vector3(fan.X * 0.55f, fan.Y + 0.95f, fan.Z + 0.2f);
 			var rest = inward + right * 0.75f + outward * 0.55f;
 			HandRest[s] = new Vector3(rest.X, FeltY, rest.Y);
+			var left = inward - right * 0.75f + outward * 0.55f;
+			HolderRest[s] = new Vector3(left.X, FeltY, left.Y);
 
 			// The place setting: under the pile, the winnings and the resting hand, facing the player.
 			var mid = inward + right * 0.35f + outward * 0.2f;

@@ -153,7 +153,7 @@ public abstract partial class CardGame : Node3D
 				Fans[s] = s == 0
 					? new CardFan(Table.FanPivot[0], sorted: SortYourHand)
 					: new CardFan(Table.FanPivot[s], sorted: false) { Radius = 0.5f, Spread = 9f, MaxArc = 80f };
-				Hands[s] = new SeatHands(this, Sounds, Table.FanPivot[s], GlassTint, Table.HandRest[s], HoldsFan);
+				Hands[s] = new SeatHands(this, Sounds, Table.FanPivot[s], GlassTint, Table.HandRest[s], HoldsFan, Table.HolderRest[s]);
 			}
 		}
 		Table.SetCloth(Saved("cloth", TableCloth.Green));
@@ -405,6 +405,7 @@ public abstract partial class CardGame : Node3D
 	{
 		if (cards.Count == 0)
 			return;
+		Hands[seat].Hold(true);
 		foreach (var node in cards)
 		{
 			foreach (var fan in Fans)

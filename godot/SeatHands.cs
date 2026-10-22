@@ -18,23 +18,26 @@ public sealed class SeatHands
 	private readonly CardSounds _sounds;
 	private readonly Transform3D _seat;
 	private readonly Vector3? _rest;
+	private readonly Vector3? _holderRest;
 
 	/// <summary>
 	/// <paramref name="rest"/> is where the working hand lies palm down on the felt between jobs (the
-	/// seat's place setting); without one it waits in the air beside the fan. Games where nobody
-	/// holds a hand of cards (War) leave out the holding hand.
+	/// seat's place setting); without one it waits in the air beside the fan. The holding hand lies
+	/// at <paramref name="holderRest"/> until there are cards to hold (see <see cref="Hold"/>).
+	/// Games where nobody holds a hand of cards (War) leave out the holding hand.
 	/// </summary>
-	public SeatHands(Node3D world, CardSounds sounds, Transform3D seat, Color tint, Vector3? rest = null, bool holds = true)
+	public SeatHands(Node3D world, CardSounds sounds, Transform3D seat, Color tint, Vector3? rest = null, bool holds = true, Vector3? holderRest = null)
 	{
 		_world = world;
 		_sounds = sounds;
 		_seat = seat;
 		_rest = rest;
+		_holderRest = holderRest;
 		if (holds)
 		{
-			Holder = new GlassHand(right: false, tint, HandPose.Hold);
+			Holder = new GlassHand(right: false, tint, holderRest != null ? HandPose.Rest : HandPose.Hold);
 			world.AddChild(Holder);
-			Holder.GlobalTransform = HoldingPose;
+			Holder.GlobalTransform = holderRest != null ? HolderRestingPose : HoldingPose;
 		}
 		Worker = new GlassHand(right: true, tint, rest != null ? HandPose.Rest : HandPose.Relaxed);
 		world.AddChild(Worker);
@@ -69,6 +72,35 @@ public sealed class SeatHands
 			var basis = new Basis(fingers.Cross(palm), fingers, palm).Orthonormalized();
 			return new Transform3D(basis, rest + Vector3.Up * 0.115f);
 		}
+	}
+
+	/// <summary>The holding hand lying palm down at the left of the seat's place, until it has cards to hold.</summary>
+	public Transform3D HolderRestingPose
+	{
+		get
+		{
+			if (_holderRest is not { } rest)
+				return HoldingPose;
+			var fingers = (Away + PlayersRight * 0.25f).Normalized();
+			var palm = Vector3.Down;
+			var basis = new Basis(fingers.Cross(palm), fingers, palm).Orthonormalized();
+			return new Transform3D(basis, rest + Vector3.Up * 0.115f);
+		}
+	}
+
+	/// <summary>Whether the left hand is holding the fan (up behind it) or lying at rest on the felt.</summary>
+	public bool Holding { get; private set; }
+
+	/// <summary>Raises the left hand to hold the fan, or lays it back down at its place.</summary>
+	public void Hold(bool holding)
+	{
+		if (Holder == null || _holderRest == null || Holding == holding)
+			return;
+		Holding = holding;
+		Holder.Pose = HandPose.Relaxed;
+		var flight = CardMotion.Fly(Holder, holding ? HoldingPose : HolderRestingPose, 0.3f, lift: 0.15f);
+		var pose = holding ? HandPose.Hold : HandPose.Rest;
+		flight.TweenCallback(Callable.From(() => { Holder.Pose = pose; }));
 	}
 
 	/// <summary>The glass colour of both hands (a speaker's turn blue, the one asked yellow).</summary>
@@ -218,6 +250,12 @@ public sealed class SeatHands
 	{
 		Worker.Pose = _rest != null ? HandPose.Rest : HandPose.Relaxed;
 		Worker.GlobalTransform = RestingPose;
+		if (Holder != null && _holderRest != null)
+		{
+			Holding = false;
+			Holder.Pose = HandPose.Rest;
+			Holder.GlobalTransform = HolderRestingPose;
+		}
 		foreach (var child in Worker.GetChildren())
 			if (child is Card3D card)
 				card.Reparent(_world, keepGlobalTransform: true);
