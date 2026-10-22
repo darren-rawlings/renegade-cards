@@ -12,8 +12,8 @@ namespace Renegade.Cards;
 /// </summary>
 public partial class TableTalk : Control
 {
-	public const int VisibleLines = 3;
-	private const int FontSize = 25, LineHeight = 34;
+	public const int VisibleLines = 4;
+	private const int FontSize = 24, LineHeight = 30;
 
 	private readonly ScrollContainer _scroll;
 	private readonly VBoxContainer _lines;

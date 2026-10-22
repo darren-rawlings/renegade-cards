@@ -66,9 +66,16 @@ public sealed class Dealer
 			// Split: each half moves out to its side, its inner end lifted for the riffle.
 			Tween? split = null;
 			for (int i = 0; i < left.Count; i++)
+			{
 				split = CardMotion.Slide(left[i], Half(spot, i, -1), 0.26f);
+				// The thumb lifts the inner ends, bending the half up.
+				left[i].BendTo(0, -0.11f, 0.26f, end: -1);
+			}
 			for (int i = 0; i < right.Count; i++)
+			{
 				split = CardMotion.Slide(right[i], Half(spot, i, +1), 0.26f);
+				right[i].BendTo(0, -0.11f, 0.26f, end: +1);
+			}
 			await _host.ToSignal(split!, Tween.SignalName.Finished);
 
 			// Riffle: the halves drop back into one stack, bottom up, in little runs from each side.
@@ -94,6 +101,8 @@ public sealed class Dealer
 				var card = order[i];
 				var target = new Transform3D(stacked, spot - stacked.Z * (CardThickness * i) + new Vector3(((float)_random.NextDouble() - 0.5f) * 0.03f, 0, 0));
 				riffle = CardMotion.Fly(card, target, 0.1f, lift: 0.03f, delay: i * 0.02f, landed: () => _sounds.PlayFlick(card.GlobalPosition));
+				// Let go: it springs straight as it drops.
+				card.BendTo(0, 0, 0.09f, delay: i * 0.02f);
 			}
 			await _host.ToSignal(riffle!, Tween.SignalName.Finished);
 
@@ -101,7 +110,11 @@ public sealed class Dealer
 			// one after another, back into a neat stack.
 			Tween? arch = null;
 			for (int i = 0; i < order.Count; i++)
+			{
 				arch = CardMotion.Slide(order[i], Arched(spot, i, order.Count), 0.22f);
+				// Fingers on top, thumbs underneath: every card bows up in the middle.
+				order[i].BendTo(-0.15f, 0, 0.22f);
+			}
 			await _host.ToSignal(arch!, Tween.SignalName.Finished);
 			Tween? cascade = null;
 			for (int i = order.Count - 1; i >= 0; i--)
@@ -110,6 +123,7 @@ public sealed class Dealer
 				int k = order.Count - 1 - i;
 				var target = new Transform3D(stacked, spot - stacked.Z * (CardThickness * i));
 				cascade = CardMotion.Slide(card, target, 0.08f, delay: k * 0.013f, landed: k % 2 == 0 ? () => _sounds.PlayFlick(card.GlobalPosition) : null);
+				card.BendTo(0, 0, 0.1f, delay: k * 0.013f);
 			}
 			await _host.ToSignal(cascade!, Tween.SignalName.Finished);
 			_sounds.PlayKnock(spot);
