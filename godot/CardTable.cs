@@ -38,24 +38,45 @@ public partial class CardTable : Node3D
 	/// <summary>Where each player's speech bubble shows.</summary>
 	public Vector3[] Bubble { get; } = new Vector3[MaxSeats];
 
-	public Vector3 Centre { get; } = new(0, FeltY, -0.35f);
+	public Vector3 Centre { get; private set; } = new(0, FeltY, -0.35f);
+
+	/// <summary>A solitaire layout: no seats, the camera looking steeply down over a wider felt.</summary>
+	public bool Solitaire { get; set; }
+
+	/// <summary>How wide the solitaire layout is, in table units (the camera frames it edge to edge).</summary>
+	public float SolitaireWidth { get; set; } = 5.3f;
 
 	public override void _Ready()
 	{
 		Stage.Build(this, 0, new Color("120c08"));
-		Camera = new Camera3D { Fov = 36, KeepAspect = Camera3D.KeepAspectEnum.Width, Position = new Vector3(0, 6.6f, 5.4f) };
-		AddChild(Camera);
-		Camera.LookAt(new Vector3(0, 0, -0.55f));
+		if (Solitaire)
+		{
+			// Nearly straight down, framed so the layout's width fills the screen with a margin.
+			float distance = (SolitaireWidth + 0.5f) / 2 / Mathf.Tan(Mathf.DegToRad(36 / 2f));
+			Camera = new Camera3D { Fov = 36, KeepAspect = Camera3D.KeepAspectEnum.Width, Position = new Vector3(0, distance, 1.6f) };
+			AddChild(Camera);
+			Camera.LookAt(new Vector3(0, 0, 0.35f));
+			Centre = new Vector3(0, FeltY, 0);
+		}
+		else
+		{
+			Camera = new Camera3D { Fov = 36, KeepAspect = Camera3D.KeepAspectEnum.Width, Position = new Vector3(0, 6.6f, 5.4f) };
+			AddChild(Camera);
+			Camera.LookAt(new Vector3(0, 0, -0.55f));
+		}
 
 		var mat = new MeshInstance3D
 		{
-			Mesh = new PlaneMesh { Size = new Vector2(4.6f, 6.4f) },
-			Position = new Vector3(0, 0.001f, -0.4f),
+			Mesh = new PlaneMesh { Size = Solitaire ? new Vector2(SolitaireWidth + 1.2f, (SolitaireWidth + 1.2f) * 2.1f) : new Vector2(4.6f, 6.4f) },
+			Position = Solitaire ? new Vector3(0, 0.001f, 0.6f) : new Vector3(0, 0.001f, -0.4f),
 			MaterialOverride = new ShaderMaterial { Shader = _felt ??= new Shader { Code = FeltCode } },
 			CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
 		};
 		AddChild(mat);
-		Arrange(Seats);
+		if (Solitaire)
+			Bubble[0] = Centre + new Vector3(0, 1f, 0);
+		else
+			Arrange(Seats);
 	}
 
 	/// <summary>Where the other players sit (x, z on the felt), for each table size, left to right.</summary>
