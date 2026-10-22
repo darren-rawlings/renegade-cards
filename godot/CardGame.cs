@@ -354,8 +354,8 @@ public abstract partial class CardGame : Node3D
 			Fans[s]?.Clear();
 		}
 		foreach (var child in GetChildren())
-			if (child is Card3D card)
-				card.QueueFree();
+			if (child is Card3D or WinCascade)
+				child.QueueFree();
 		Hud.SetNewGameVisible(false);
 		Hud.SetRestartVisible(false);
 	}
@@ -544,13 +544,57 @@ public abstract partial class CardGame : Node3D
 	/// <summary>The level can only change between games: its button is locked while one is under way.</summary>
 	public override void _Process(double delta) => Hud?.SetModesLocked(HasLevels && !Demo && InProgress);
 
+	private bool _dragging;
+	private Vector2 _dragFrom;
+
+	/// <summary>
+	/// A press on the table may start a drag (games that move cards by dragging say so, and return
+	/// true when the press picked something up); otherwise it's a tap.
+	/// </summary>
+	protected virtual bool BeginDrag(Vector3 origin, Vector3 direction, Vector2 screen) => false;
+
+	/// <summary>The finger (or mouse) moved while dragging.</summary>
+	protected virtual void DragTo(Vector3 origin, Vector3 direction) { }
+
+	/// <summary>Let go. <paramref name="moved"/> is false when it was really just a tap.</summary>
+	protected virtual void EndDrag(Vector3 origin, Vector3 direction, bool moved) { }
+
+	/// <summary>Where a ray from the camera meets a level plane (the felt, or a little above it).</summary>
+	protected static Vector3 OnPlane(Vector3 origin, Vector3 direction, float y)
+	{
+		if (Mathf.Abs(direction.Y) < 1e-4f)
+			return origin;
+		return origin + direction * ((y - origin.Y) / direction.Y);
+	}
+
 	public override void _UnhandledInput(InputEvent @event)
 	{
+		if (_dragging)
+		{
+			if (@event is InputEventMouseMotion motion)
+			{
+				var (o, d) = Table.Ray(motion.Position);
+				DragTo(o, d);
+			}
+			else if (@event is InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Left } up)
+			{
+				_dragging = false;
+				var (o, d) = Table.Ray(up.Position);
+				EndDrag(o, d, up.Position.DistanceTo(_dragFrom) > 14);
+			}
+			return;
+		}
 		if (Busy || Hud == null || Hud.MenuOpen || _styleMenu.Visible)
 			return;
 		if (@event is not InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } click)
 			return;
 		var (origin, direction) = Table.Ray(click.Position);
+		if (BeginDrag(origin, direction, click.Position))
+		{
+			_dragging = true;
+			_dragFrom = click.Position;
+			return;
+		}
 		Tapped(origin, direction, click.Position);
 	}
 
