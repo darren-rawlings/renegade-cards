@@ -4,27 +4,39 @@ using Renegade.Play;
 namespace Renegade.Cards;
 
 /// <summary>
-/// A card table for two: the studio's shared stage (lights, reflections, the wooden table) with a
-/// felt mat on top, a fixed camera (card tables don't spin), and the places a two-player game
-/// uses: each player's fan of cards, their dealt pile and their winnings, and the middle of the
-/// table. The near player (you) sits at the bottom of the portrait screen.
+/// A card table for 2 to 5 players: the studio's shared stage (lights, reflections, the wooden
+/// table) with a felt mat on top, a fixed camera (card tables don't spin), and the places a game
+/// uses at each seat: the fan of cards, the dealt pile, the winnings, where cards thrown to that
+/// player land, and where their speech bubble goes. Seat 0 is you, at the bottom of the portrait
+/// screen; the others sit round the far side of the table, left to right. Set
+/// <see cref="Seats"/> before adding the table, or call <see cref="Arrange"/> to change it.
 /// </summary>
 public partial class CardTable : Node3D
 {
 	public const float FeltY = 0.002f;
+	public const int MaxSeats = 5;
 
 	private static Shader? _felt;
 
 	public Camera3D Camera { get; private set; } = null!;
 
-	/// <summary>Where each player's fan is held: index 0 is you, 1 the player across the table.</summary>
-	public Transform3D[] FanPivot { get; } = new Transform3D[2];
+	/// <summary>How many players sit at the table (2 to 5).</summary>
+	public int Seats { get; set; } = 2;
+
+	/// <summary>Where each player's fan is held (seat 0 is you); its +Z faces the player holding it.</summary>
+	public Transform3D[] FanPivot { get; } = new Transform3D[MaxSeats];
 
 	/// <summary>Where each player's dealt cards land before they're picked up.</summary>
-	public Vector3[] Pile { get; } = new Vector3[2];
+	public Vector3[] Pile { get; } = new Vector3[MaxSeats];
 
 	/// <summary>Where each player lays down what they win (books, tricks).</summary>
-	public Vector3[] Winnings { get; } = new Vector3[2];
+	public Vector3[] Winnings { get; } = new Vector3[MaxSeats];
+
+	/// <summary>Where cards thrown to a player land, in front of them.</summary>
+	public Vector3[] Landing { get; } = new Vector3[MaxSeats];
+
+	/// <summary>Where each player's speech bubble shows.</summary>
+	public Vector3[] Bubble { get; } = new Vector3[MaxSeats];
 
 	public Vector3 Centre { get; } = new(0, FeltY, -0.35f);
 
@@ -43,18 +55,56 @@ public partial class CardTable : Node3D
 			CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
 		};
 		AddChild(mat);
+		Arrange(Seats);
+	}
 
+	/// <summary>Where the other players sit (x, z on the felt), for each table size, left to right.</summary>
+	private static readonly Vector2[][] Around =
+	{
+		new Vector2[0],
+		new Vector2[0],
+		new[] { new Vector2(0, -2.75f) },
+		new[] { new Vector2(-1.2f, -2.6f), new Vector2(1.2f, -2.6f) },
+		new[] { new Vector2(-1.85f, -0.95f), new Vector2(0, -2.75f), new Vector2(1.85f, -0.95f) },
+		new[] { new Vector2(-1.85f, -0.7f), new Vector2(-1.0f, -2.7f), new Vector2(1.0f, -2.7f), new Vector2(1.85f, -0.7f) },
+	};
+
+	/// <summary>Seats a number of players (2 to 5) and works out every seat's places.</summary>
+	public void Arrange(int seats)
+	{
+		Seats = Mathf.Clamp(seats, 2, MaxSeats);
 		var eye = Camera.GlobalPosition;
-		// Your fan: held up close, tilted to face you, low on the screen.
+		var centre = new Vector2(Centre.X, Centre.Z);
+
+		// You: your fan held up close, tilted to face you, low on the screen.
 		var near = new Vector3(0, 2.15f, 3.46f);
 		FanPivot[0] = new Transform3D(Basis.LookingAt(near - eye, Vector3.Up), near);
-		// Theirs: across the table, facing them, so you see the backs.
-		var far = new Vector3(0, 1.05f, -2.75f);
-		FanPivot[1] = new Transform3D(Basis.LookingAt(eye - far, Vector3.Up), far);
 		Pile[0] = new Vector3(0, FeltY, 1.25f);
-		Pile[1] = new Vector3(0, FeltY, -2.05f);
 		Winnings[0] = new Vector3(1.45f, FeltY, 0.5f);
-		Winnings[1] = new Vector3(-1.25f, FeltY, -2.15f);
+		Landing[0] = new Vector3(-1.2f, FeltY, 0.45f);
+		Bubble[0] = new Vector3(0, 1.2f, 1.3f);
+
+		for (int s = 1; s < Seats; s++)
+		{
+			var at = Around[Seats][s - 1];
+			bool side = Mathf.Abs(at.X) > 1.5f;
+			var fan = new Vector3(at.X, side ? 0.85f : 1.05f, at.Y);
+			// Each fan faces its player: outward from the middle, and a little away from you so
+			// you see its backs spread rather than edge-on.
+			var outward = (at - centre).Normalized();
+			var away = (fan - eye).Normalized();
+			var forward = (new Vector3(outward.X, 0, outward.Y) * 0.55f + away * 0.45f).Normalized();
+			FanPivot[s] = new Transform3D(Basis.LookingAt(-forward, Vector3.Up), fan);
+
+			var inward = centre + (at - centre) * 0.62f;
+			var right = new Vector2(-outward.Y, outward.X); // the player's right, seen from the middle
+			Pile[s] = new Vector3(inward.X, FeltY, inward.Y);
+			var win = inward + right * 0.8f;
+			Winnings[s] = new Vector3(win.X, FeltY, win.Y);
+			var land = centre + (at - centre) * 0.4f - right * 0.45f;
+			Landing[s] = new Vector3(land.X, FeltY, land.Y);
+			Bubble[s] = new Vector3(fan.X * 0.55f, fan.Y + 0.95f, fan.Z + 0.2f);
+		}
 	}
 
 	/// <summary>Projects a screen tap into the world: a ray from the camera.</summary>
