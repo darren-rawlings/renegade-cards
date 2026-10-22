@@ -446,6 +446,7 @@ public abstract partial class CardGame : Node3D
 	/// </summary>
 	protected void Finish(string message, int winner, IEnumerable<Card3D>? winnersCards = null, Vector3? at = null)
 	{
+		DevLog.Write($"finish: {message}");
 		Hud.SetStatus(message, Bright);
 		if (winner >= 0)
 		{
