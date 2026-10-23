@@ -15,7 +15,7 @@ public sealed class Dealer
 	public const float CardThickness = 0.0035f;
 
 	/// <summary>How far apart the riffled halves stay until the bridge pushes them together (along the cards' length).</summary>
-	private const float Meshed = 0.09f;
+	private const float Meshed = 0.065f;
 
 	private readonly Node3D _host;
 	private readonly CardSounds _sounds;
@@ -51,13 +51,31 @@ public sealed class Dealer
 	/// and let fall back in a cascade), and put back down squared up. Done a number of times.
 	/// Reorders the list to match.
 	/// </summary>
-	public async Task Riffle(List<Card3D> deck, Vector3 at, int times = 2)
+	public async Task Riffle(List<Card3D> deck, Vector3 at, int times = 2, GlassHand? leftHand = null, GlassHand? rightHand = null)
 	{
 		var spot = Spot(at);
+		var leftHome = leftHand?.GlobalTransform;
+		var rightHome = rightHand?.GlobalTransform;
+		// With hands: each moves to hold the deck from above, back of the hand to the player.
+		void Hands(Transform3D leftOn, Transform3D rightOn, float seconds)
+		{
+			if (leftHand != null)
+			{
+				leftHand.Pose = HandPose.Hold;
+				CardMotion.Fly(leftHand, PalmOn(leftOn, 0.13f), seconds, lift: 0.05f);
+			}
+			if (rightHand != null)
+			{
+				rightHand.Pose = HandPose.Hold;
+				CardMotion.Fly(rightHand, PalmOn(rightOn, 0.13f), seconds, lift: 0.05f);
+			}
+		}
+		Transform3D End(Basis basis, int side, float reach, int height) => new(basis, spot - basis.Z * (CardThickness * height) - basis.Y * (side * reach));
 		// Lift the deck and turn it towards the player.
 		Tween? lift = null;
 		for (int i = 0; i < deck.Count; i++)
 			lift = CardMotion.Fly(deck[i], new Transform3D(Sideways(), spot - Sideways().Z * (CardThickness * i)), 0.35f, lift: 0.15f, delay: 0.004f * i);
+		Hands(End(Sideways(), -1, 0.3f, deck.Count), End(Sideways(), 1, 0.3f, deck.Count), 0.4f);
 		await _host.ToSignal(lift!, Tween.SignalName.Finished);
 
 		for (int pass = 0; pass < times; pass++)
@@ -79,6 +97,9 @@ public sealed class Dealer
 				split = CardMotion.Slide(right[i], Half(spot, i, +1), 0.26f);
 				right[i].BendTo(0, -0.11f, 0.26f, end: +1);
 			}
+			// Each hand goes with its half, holding it by the outer end.
+			Hands(new Transform3D(Half(spot, left.Count, -1).Basis, Half(spot, left.Count, -1).Origin + new Vector3(-0.12f, 0, 0)),
+				new Transform3D(Half(spot, right.Count, 1).Basis, Half(spot, right.Count, 1).Origin + new Vector3(0.12f, 0, 0)), 0.26f);
 			await _host.ToSignal(split!, Tween.SignalName.Finished);
 
 			// Riffle: the halves drop back into one stack, bottom up, in little runs from each side.
@@ -116,6 +137,8 @@ public sealed class Dealer
 			// another while the halves slide together into a neat stack.
 			Tween? arch = null;
 			var bowed = Sideways(0.68f);
+			// The hands hold the ends while the thumbs push up underneath.
+			Hands(End(bowed, -1, 0.34f, order.Count), End(bowed, 1, 0.34f, order.Count), 0.3f);
 			for (int i = 0; i < order.Count; i++)
 			{
 				int side = left.Contains(order[i]) ? -1 : 1;
@@ -135,16 +158,41 @@ public sealed class Dealer
 			}
 			await _host.ToSignal(cascade!, Tween.SignalName.Finished);
 			_sounds.PlayKnock(spot);
+			Hands(End(stacked, -1, 0.3f, order.Count), End(stacked, 1, 0.3f, order.Count), 0.2f);
 			deck.Clear();
 			deck.AddRange(order);
 		}
 
+		// The hands let go and go back where they were.
+		if (leftHand != null && leftHome is { } lh)
+		{
+			leftHand.Pose = HandPose.Relaxed;
+			CardMotion.Fly(leftHand, lh, 0.35f, lift: 0.1f).TweenCallback(Callable.From(() => { leftHand.Pose = HandPose.Rest; }));
+		}
+		if (rightHand != null && rightHome is { } rh)
+		{
+			rightHand.Pose = HandPose.Relaxed;
+			CardMotion.Fly(rightHand, rh, 0.35f, lift: 0.1f).TweenCallback(Callable.From(() => { rightHand.Pose = HandPose.Rest; }));
+		}
 		// Put the squared-up deck back down in the middle of the table.
 		Tween? down = null;
 		for (int i = 0; i < deck.Count; i++)
 			down = CardMotion.Fly(deck[i], InStack(at, i), 0.32f, lift: 0.1f, delay: 0.003f * (deck.Count - i));
 		await _host.ToSignal(down!, Tween.SignalName.Finished);
 		_sounds.PlayKnock(at);
+	}
+
+	/// <summary>
+	/// A hand laid on top of a card (or a stack whose top card this is), palm towards it and the back of
+	/// the hand up, fingers reaching away from the player along the card.
+	/// </summary>
+	public static Transform3D PalmOn(Transform3D card, float lift)
+	{
+		var back = -card.Basis.Z.Normalized();
+		var fingers = (Vector3.Forward - back * Vector3.Forward.Dot(back)).Normalized();
+		var palm = -back;
+		var x = fingers.Cross(palm).Normalized();
+		return new Transform3D(new Basis(x, fingers, palm), card.Origin + back * lift);
 	}
 
 	/// <summary>A card's place in one half of a split deck: off to one side, its inner end lifted.</summary>

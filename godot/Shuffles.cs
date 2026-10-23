@@ -72,7 +72,7 @@ public sealed class Shuffles
 	{
 		switch (style)
 		{
-			case ShuffleStyle.RiffleBridge: await _dealer.Riffle(deck, at, times: 1); break;
+			case ShuffleStyle.RiffleBridge: await _dealer.Riffle(deck, at, times: 1, Left, Right); break;
 			case ShuffleStyle.TableRiffle: await TableRiffle(deck, at); break;
 			case ShuffleStyle.Overhand: await Overhand(deck, at); break;
 			case ShuffleStyle.Hindu: await Hindu(deck, at); break;
@@ -213,43 +213,85 @@ public sealed class Shuffles
 		await ToRest(at);
 	}
 
+	// ------------------------------------------------------------------ Cards held in the hands
+
+	/// <summary>A deck lying face down in the air, its long edge to the player, tipped towards them.</summary>
+	private static Basis Lying(float tilt = 0.6f) =>
+		new Basis(Vector3.Right, -tilt) * new Basis(Vector3.Up, Mathf.Pi / 2) * Card3D.FaceDown();
+
+	/// <summary>A hand under a card (or a pile whose bottom card this is), palm up against it, fingers away from the player.</summary>
+	private static Transform3D PalmUnder(Transform3D card, float drop)
+	{
+		var back = -card.Basis.Z.Normalized();
+		var fingers = (Vector3.Forward - back * Vector3.Forward.Dot(back)).Normalized();
+		var x = fingers.Cross(back).Normalized();
+		return new Transform3D(new Basis(x, fingers, back), card.Origin - back * drop);
+	}
+
+	/// <summary>Cards picked up by a hand move with it (until let go).</summary>
+	private static void Attach(IEnumerable<Card3D> cards, Node3D hand)
+	{
+		foreach (var card in cards)
+			card.Reparent(hand, keepGlobalTransform: true);
+	}
+
+	private void Detach(IEnumerable<Card3D> cards)
+	{
+		foreach (var card in cards)
+			card.Reparent(_host, keepGlobalTransform: true);
+	}
+
+	/// <summary>Where a hand must go so that a card it holds ends up at a place.</summary>
+	private static Transform3D Bring(GlassHand hand, Card3D held, Transform3D place) =>
+		place * (hand.GlobalTransform.AffineInverse() * held.GlobalTransform).AffineInverse();
+
 	// ------------------------------------------------------------------ Overhand
 
 	private async Task Overhand(List<Card3D> deck, Vector3 at)
 	{
 		var spot = Air(at);
-		var from = spot + new Vector3(0.32f, 0, 0);
-		var into = spot + new Vector3(-0.32f, 0, 0);
-		var basis = Standing(spot, landscape: true, tilt: -0.25f);
-		var toward = basis.Z * -1; // towards the player
-		// Up into the right hand, standing on its long side.
-		Tween? up = null;
+		var from = spot + new Vector3(0.34f, 0.05f, 0);
+		var into = spot + new Vector3(-0.3f, -0.05f, 0);
+		var basis = Standing(spot, landscape: true, tilt: -0.3f);
+		var toward = -basis.Z; // the backs, towards the player
+		var up = (Vector3.Up - toward * Vector3.Up.Dot(toward)).Normalized(); // along the card, up to its top edge
+		// A hand over a standing pile: on its top edge, palm down, the back of the hand to the player.
+		Transform3D OnEdge(Vector3 centre, int thick) =>
+			Hand(centre + up * (Card3D.Width / 2 + 0.11f) + toward * (Dealer.CardThickness * thick * 0.5f), -up, -toward);
+		Tween? lift = null;
 		for (int i = 0; i < deck.Count; i++)
-			up = CardMotion.Fly(deck[i], new Transform3D(basis, from + toward * (Dealer.CardThickness * i)), 0.4f, lift: 0.2f, delay: 0.003f * i);
+			lift = CardMotion.Fly(deck[i], new Transform3D(basis, from + toward * (Dealer.CardThickness * i)), 0.4f, lift: 0.2f, delay: 0.003f * i);
 		Right.Pose = HandPose.Hold;
-		Left.Pose = HandPose.Relaxed;
-		HandTo(Right, Hand(from + Vector3.Down * 0.28f - toward * 0.1f, toward + Vector3.Up * 0.3f, Vector3.Up), 0.4f);
-		HandTo(Left, Hand(into + Vector3.Down * 0.3f - toward * 0.12f, toward + Vector3.Up * 0.4f, Vector3.Up), 0.4f);
-		await Done(up);
-		// The left thumb pulls packets off the front (the top) onto the front of the left pile.
-		var source = deck.AsEnumerable().Reverse().ToList(); // front (top) first
+		Left.Pose = HandPose.Hold;
+		HandTo(Right, OnEdge(from, deck.Count), 0.4f);
+		HandTo(Left, OnEdge(into, 0), 0.4f);
+		await Done(lift);
+		Attach(deck, Right);
+		var source = deck.ToList(); // back to front: the last is nearest the player
 		var pile = new List<Card3D>(); // back to front
-		foreach (int size in Packets(deck.Count, 3, 8))
+		foreach (int size in Packets(deck.Count, 4, 8))
 		{
-			var packet = source.Take(size).ToList();
-			source.RemoveRange(0, size);
-			Tween? move = null;
-			// The packet keeps its order; it lands in front of what the left hand already holds.
-			for (int k = packet.Count - 1; k >= 0; k--)
+			// The right hand brings the deck across, its front against the left hand's pile.
+			var front = source[^1];
+			var meet = new Transform3D(basis, into + toward * (Dealer.CardThickness * (pile.Count + size + 1)));
+			await Done(CardMotion.Fly(Right, Bring(Right, front, meet), 0.2f, lift: 0.04f));
+			// The left thumb holds the front packet; the right hand lifts the rest away and back.
+			var packet = source.Skip(source.Count - size).ToList();
+			source.RemoveRange(source.Count - size, size);
+			Detach(packet);
+			Attach(packet, Left);
+			// The packet lands on the front of the left pile, keeping its order.
+			for (int k = 0; k < packet.Count; k++)
 			{
 				pile.Add(packet[k]);
-				int depth = pile.Count - 1;
-				move = CardMotion.Fly(packet[k], new Transform3D(basis, into + toward * (Dealer.CardThickness * depth)), 0.24f, lift: 0.06f);
+				CardMotion.Slide(packet[k], new Transform3D(basis, into + toward * (Dealer.CardThickness * pile.Count)), 0.12f);
 			}
 			_sounds.PlayFlick(into);
-			await Done(move);
-			await Wait(0.16f);
+			if (source.Count > 0)
+				await Done(CardMotion.Fly(Right, Bring(Right, source[0], new Transform3D(basis, from)), 0.22f, lift: 0.05f));
+			await Wait(0.06f);
 		}
+		Detach(pile);
 		// The pile, back to front, is the new deck bottom to top.
 		deck.Clear();
 		deck.AddRange(pile);
@@ -262,35 +304,44 @@ public sealed class Shuffles
 	private async Task Hindu(List<Card3D> deck, Vector3 at)
 	{
 		var spot = Air(at);
-		var above = spot + new Vector3(0.1f, 0.25f, 0);
-		var below = spot + new Vector3(-0.1f, -0.2f, 0.05f);
-		var basis = Standing(spot, landscape: false, tilt: -1.0f); // lying back, its top away from the player
-		var up = basis.Z * -1;
+		var basis = Lying(0.6f);
+		var n = -basis.Z; // up from the deck's back
+		var hold = spot + new Vector3(0.34f, 0.12f, -0.05f);
+		var palm = spot + new Vector3(-0.22f, -0.12f, 0.08f);
+		Transform3D OnPile(int height) => new(basis, palm + n * (Dealer.CardThickness * height));
+		// Up into the right hand, held from above by the ends; the left hand waits beneath, palm up.
 		Tween? lift = null;
 		for (int i = 0; i < deck.Count; i++)
-			lift = CardMotion.Fly(deck[i], new Transform3D(basis, above + up * (Dealer.CardThickness * i)), 0.4f, lift: 0.2f, delay: 0.003f * i);
-		// The right hand holds it by the ends from above; the left waits underneath, palm up.
-		Right.Pose = HandPose.Pinch;
+			lift = CardMotion.Fly(deck[i], new Transform3D(basis, hold + n * (Dealer.CardThickness * i)), 0.4f, lift: 0.2f, delay: 0.003f * i);
+		Right.Pose = HandPose.Hold;
 		Left.Pose = HandPose.Relaxed;
-		HandTo(Right, Hand(above + up * 0.2f + new Vector3(0.25f, 0, 0), -up, new Vector3(-1, 0, -0.3f)), 0.4f);
-		HandTo(Left, Hand(below - up * 0.18f, up, new Vector3(1, 0, -0.4f)), 0.4f);
+		HandTo(Right, Dealer.PalmOn(new Transform3D(basis, hold + n * (Dealer.CardThickness * deck.Count)), 0.12f), 0.4f);
+		HandTo(Left, PalmUnder(OnPile(0), 0.1f), 0.4f);
 		await Done(lift);
-		var source = deck.ToList(); // bottom first: packets come off the top
+		Attach(deck, Right);
+		var source = deck.ToList(); // bottom first
 		var pile = new List<Card3D>();
 		foreach (int size in Packets(deck.Count, 4, 9))
 		{
-			// The deck dips into the left hand, which strips a packet off the top.
+			// The deck dips into the left palm, its bottom just above the pile.
+			var bottom = source[0];
+			await Done(CardMotion.Fly(Right, Bring(Right, bottom, OnPile(pile.Count + 1)), 0.18f, lift: 0.03f));
+			// The left fingers keep the top packet; the right hand draws the rest away from underneath it.
 			var packet = source.Skip(source.Count - size).ToList();
 			source.RemoveRange(source.Count - size, size);
-			Tween? move = null;
+			Detach(packet);
+			if (source.Count > 0)
+				CardMotion.Fly(Right, Bring(Right, source[0], new Transform3D(basis, hold)), 0.22f, lift: 0.05f);
+			// The packet drops onto the pile.
+			Tween? fall = null;
 			for (int k = 0; k < packet.Count; k++)
 			{
 				pile.Add(packet[k]);
-				move = CardMotion.Fly(packet[k], new Transform3D(basis, below + up * (Dealer.CardThickness * pile.Count)), 0.26f, lift: 0.05f);
+				fall = CardMotion.Slide(packet[k], OnPile(pile.Count), 0.12f, delay: 0.05f);
 			}
-			_sounds.PlayFlick(below);
-			await Done(move);
-			await Wait(0.18f);
+			_sounds.PlayFlick(palm);
+			await Done(fall);
+			await Wait(0.1f);
 		}
 		deck.Clear();
 		deck.AddRange(pile);
@@ -372,23 +423,25 @@ public sealed class Shuffles
 	private async Task Faro(List<Card3D> deck, Vector3 at)
 	{
 		var spot = Air(at);
-		var basis = Standing(spot, landscape: false, tilt: -0.7f);
-		var up = basis.Z * -1;
-		var along = basis.Y; // the cards' length: the halves meet end to end along it
+		var basis = Lying(0.6f);
+		var n = -basis.Z;
+		var along = basis.Y; // the cards' length (towards the left): the halves meet end to end along it
 		int half = deck.Count / 2;
 		var low = deck.GetRange(0, half);
 		var high = deck.GetRange(half, deck.Count - half);
+		Transform3D Place(int side, float apart, int height) => new(basis, spot + along * (side * -apart) + n * (Dealer.CardThickness * height));
+		// The halves lie end to end, a hand on each from above, holding it by its outer end.
 		Tween? lift = null;
 		for (int i = 0; i < low.Count; i++)
-			lift = CardMotion.Fly(low[i], new Transform3D(basis, spot - along * 0.5f + up * (Dealer.CardThickness * i)), 0.4f, lift: 0.2f, delay: 0.003f * i);
+			lift = CardMotion.Fly(low[i], Place(-1, 0.6f, i), 0.4f, lift: 0.2f, delay: 0.003f * i);
 		for (int i = 0; i < high.Count; i++)
-			lift = CardMotion.Fly(high[i], new Transform3D(basis, spot + along * 0.5f + up * (Dealer.CardThickness * i)), 0.4f, lift: 0.2f, delay: 0.003f * i);
+			lift = CardMotion.Fly(high[i], Place(1, 0.6f, i), 0.4f, lift: 0.2f, delay: 0.003f * i);
 		Left.Pose = HandPose.Hold;
 		Right.Pose = HandPose.Hold;
-		HandTo(Left, Hand(spot - along * 0.8f - up * 0.1f, along, up), 0.4f);
-		HandTo(Right, Hand(spot + along * 0.8f - up * 0.1f, -along, up), 0.4f);
+		HandTo(Left, Dealer.PalmOn(Place(-1, 0.78f, low.Count), 0.12f), 0.4f);
+		HandTo(Right, Dealer.PalmOn(Place(1, 0.78f, high.Count), 0.12f), 0.4f);
 		await Done(lift);
-		// Pushed end to end: the halves weave, one card from each in turn.
+		// Pushed end to end, the halves weave: one card from each in turn.
 		var order = new List<Card3D>();
 		for (int i = 0; i < Math.Max(low.Count, high.Count); i++)
 		{
@@ -399,28 +452,24 @@ public sealed class Shuffles
 		}
 		Tween? weave = null;
 		for (int i = 0; i < order.Count; i++)
-		{
-			bool fromLow = low.Contains(order[i]);
-			var target = new Transform3D(basis, spot + along * (fromLow ? -0.22f : 0.22f) + up * (Dealer.CardThickness * 0.5f * i));
-			weave = CardMotion.Slide(order[i], target, 0.9f, delay: i * 0.004f);
-		}
-		HandTo(Left, Hand(spot - along * 0.52f - up * 0.1f, along, up), 0.5f);
-		HandTo(Right, Hand(spot + along * 0.52f - up * 0.1f, -along, up), 0.5f);
+			weave = CardMotion.Slide(order[i], Place(low.Contains(order[i]) ? -1 : 1, 0.16f, i), 0.9f, delay: i * 0.004f);
+		HandTo(Left, Dealer.PalmOn(Place(-1, 0.34f, order.Count), 0.12f), 0.9f);
+		HandTo(Right, Dealer.PalmOn(Place(1, 0.34f, order.Count), 0.12f), 0.9f);
 		await Done(weave);
 		_sounds.PlayFlick(spot);
-		// Bow the woven deck and let it cascade together.
+		// Bowed up as one block, the hands pressing down on the ends, then released to cascade together.
 		Tween? bow = null;
 		foreach (var card in order)
-			bow = card.BendTo(-0.15f, 0, 0.25f);
+			bow = card.BendTo(-0.15f, 0, 0.28f);
 		await Done(bow);
 		Tween? cascade = null;
 		for (int i = order.Count - 1; i >= 0; i--)
 		{
 			int k = order.Count - 1 - i;
 			var card = order[i];
-			cascade = CardMotion.Slide(card, new Transform3D(basis, spot + up * (Dealer.CardThickness * i)), 0.08f, delay: k * 0.013f,
+			cascade = CardMotion.Slide(card, Place(0, 0, i), 0.1f, delay: k * 0.014f,
 				landed: k % 2 == 0 ? () => _sounds.PlayFlick(card.GlobalPosition) : null);
-			card.BendTo(0, 0, 0.1f, delay: k * 0.013f);
+			card.BendTo(0, 0, 0.1f, delay: k * 0.014f);
 		}
 		await Done(cascade);
 		deck.Clear();
