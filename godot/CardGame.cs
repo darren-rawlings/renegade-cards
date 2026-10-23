@@ -266,7 +266,7 @@ public abstract partial class CardGame : Node3D
 	/// ad, and <paramref name="rewarded"/> runs once it's been watched. With ads removed in the shop,
 	/// the "(ad)" leaves the label and the button just works.
 	/// </summary>
-	protected Button AddAdButton(string text, Control.LayoutPreset preset, float left, float right, float top, float bottom, Action rewarded)
+	protected Button AddAdButton(string text, Control.LayoutPreset preset, float left, float right, float top, float bottom, Action rewarded, Func<bool>? can = null)
 	{
 		string label = $"{text} (ad)";
 		var button = Hud.AddButton(ShopRows.AdText(label), false, preset, left, right, top, bottom, 22);
@@ -278,7 +278,8 @@ public abstract partial class CardGame : Node3D
 		}
 		button.Pressed += () =>
 		{
-			if (Busy)
+			// No ad for nothing: only when there's something to do.
+			if (Busy || can?.Invoke() == false)
 				return;
 			DevLog.Write($"ad: rewarded for {text}");
 			Ads.ShowRewarded(rewarded: rewarded, closed: () => { });

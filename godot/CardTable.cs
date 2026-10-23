@@ -128,8 +128,8 @@ public partial class CardTable : Node3D
 		new (Vector2, Vector2)[0],
 		new[] { (new Vector2(0, -2.55f), Vector2.Down) },
 		new[] { (new Vector2(-1.25f, -2.45f), Vector2.Down), (new Vector2(1.25f, -2.45f), Vector2.Down) },
-		new[] { (new Vector2(-1.95f, -0.35f), Vector2.Right), (new Vector2(0, -2.55f), Vector2.Down), (new Vector2(1.95f, -0.35f), Vector2.Left) },
-		new[] { (new Vector2(-1.95f, -0.3f), Vector2.Right), (new Vector2(-1.05f, -2.5f), Vector2.Down), (new Vector2(1.05f, -2.5f), Vector2.Down), (new Vector2(1.95f, -0.3f), Vector2.Left) },
+		new[] { (new Vector2(-1.78f, -0.35f), Vector2.Right), (new Vector2(0, -2.55f), Vector2.Down), (new Vector2(1.78f, -0.35f), Vector2.Left) },
+		new[] { (new Vector2(-1.78f, -0.3f), Vector2.Right), (new Vector2(-1.05f, -2.5f), Vector2.Down), (new Vector2(1.05f, -2.5f), Vector2.Down), (new Vector2(1.78f, -0.3f), Vector2.Left) },
 	};
 
 	/// <summary>Seats a number of players (2 to 5) and works out every seat's places.</summary>
@@ -176,7 +176,7 @@ public partial class CardTable : Node3D
 			HandRest[s] = mat + r * 0.72f - f * 0.12f;
 			HolderRest[s] = mat - r * 0.72f - f * 0.12f;
 			Bubble[s] = new Vector3(fan.X * 0.55f, fan.Y + 0.95f, fan.Z + 0.2f);
-			var size = side ? new Vector2(1.8f, 1.15f) : Seats == 5 ? new Vector2(1.75f, 1.1f) : new Vector2(2.0f, 1.15f);
+			var size = side ? new Vector2(1.75f, 1.0f) : Seats == 5 ? new Vector2(1.75f, 1.1f) : new Vector2(2.0f, 1.15f);
 			AddMat(mat, Mathf.Atan2(f.X, f.Z), size, TableTalk.SeatColour(s));
 		}
 	}
@@ -241,7 +241,7 @@ void fragment() {
 	if (outside > 0.0) discard;
 	float fibre = hash(floor(UV * size * 160.0));
 	// The mat is its player's colour (their name's colour in the log), soft like the felt.
-	vec3 colour = mix(felt * 0.8, tint * 0.62, 0.62) * (0.9 + 0.1 * fibre);
+	vec3 colour = mix(felt * 0.75, tint * 0.78, 0.86) * (0.9 + 0.1 * fibre);
 	// A dashed stitch a little inside the edge.
 	float line = 1.0 - smoothstep(0.006, 0.014, abs(outside + 0.07));
 	float along = abs(q.x) > abs(q.y) ? p.y : p.x;
