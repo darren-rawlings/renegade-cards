@@ -59,6 +59,9 @@ public partial class CardTable : Node3D
 	/// <summary>Where each player's left hand lies palm down until it has cards to hold.</summary>
 	public Vector3[] HolderRest { get; } = new Vector3[MaxSeats];
 
+	/// <summary>The way each player faces, straight across the table (along the felt).</summary>
+	public Vector3[] Toward { get; } = new Vector3[MaxSeats];
+
 	/// <summary>Where each player's speech bubble shows (kept for games that still point at a seat).</summary>
 	public Vector3[] Bubble { get; } = new Vector3[MaxSeats];
 
@@ -168,6 +171,7 @@ public partial class CardTable : Node3D
 		var near = new Vector3(0, 2.15f, 3.46f);
 		FanPivot[0] = new Transform3D(Basis.LookingAt(near - eye, Vector3.Up), near);
 		float z = YourPlace;
+		Toward[0] = Vector3.Forward;
 		Pile[0] = new Vector3(0, FeltY, z + 0.1f);
 		Winnings[0] = new Vector3(1.45f, FeltY, z - 0.65f);
 		Landing[0] = new Vector3(-1.2f, FeltY, z - 0.7f);
@@ -197,6 +201,7 @@ public partial class CardTable : Node3D
 
 			// The place setting in front of them, square to the table, with everything on it.
 			var mat = seat + f * reach;
+			Toward[s] = f;
 			Pile[s] = mat;
 			Winnings[s] = mat - r * 0.45f + f * 0.1f;
 			Landing[s] = mat + f * 0.55f + r * 0.2f;
