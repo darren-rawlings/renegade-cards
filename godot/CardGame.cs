@@ -48,6 +48,8 @@ public abstract partial class CardGame : Node3D
 	private Flames? _fire;
 	private string? _art;
 	private bool _handCheck;
+	private bool _shuffleLab, _quitAfterShuffle;
+	private ShuffleStyle? _shuffleStyle;
 
 	/// <summary>True while the table is acting something out; taps are ignored.</summary>
 	protected bool Busy = true;
@@ -129,6 +131,11 @@ public abstract partial class CardGame : Node3D
 		if (_handCheck)
 		{
 			Run(ShowHands());
+			return;
+		}
+		if (_shuffleLab)
+		{
+			Run(ShuffleLab.Run(this, _shuffleStyle, _quitAfterShuffle));
 			return;
 		}
 		AudioServer.SetBusMute(0, Settings.Muted);
@@ -724,6 +731,16 @@ public abstract partial class CardGame : Node3D
 					break;
 				case "--hands":
 					_handCheck = true;
+					break;
+				case "--shuffles":
+					_shuffleLab = true;
+					break;
+				case "--shuffle":
+					_shuffleLab = true;
+					_shuffleStyle = Enum.TryParse<ShuffleStyle>(value, out var style) ? style : null;
+					break;
+				case "--quit-after-shuffle":
+					_quitAfterShuffle = true;
 					break;
 				case "--seed":
 					Random = new Random(int.Parse(value));
