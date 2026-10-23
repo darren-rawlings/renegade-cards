@@ -91,7 +91,7 @@ public sealed class Shuffles
 	private Basis Standing(Vector3 where, bool landscape, float tilt = 0)
 	{
 		var toEye = (_eye - where).Normalized();
-		var basis = Basis.LookingAt(-toEye, Vector3.Up); // -Z (the back) towards the eye
+		var basis = Basis.LookingAt(toEye, Vector3.Up); // -Z (the back) towards the eye
 		if (landscape)
 			basis *= new Basis(Vector3.Back, Mathf.Pi / 2);
 		return basis * new Basis(Vector3.Right, tilt);
@@ -200,8 +200,8 @@ public sealed class Shuffles
 			var card = order[i];
 			int side = left.Contains(card) ? -1 : +1;
 			var target = new Transform3D(Card3D.FaceDown(Mathf.Pi / 2 + side * 0.38f), at + new Vector3(side * 0.3f, Dealer.CardThickness * (i + 1), 0.15f));
-			drop = CardMotion.Slide(card, target, 0.07f, delay: i * 0.018f, landed: i % 2 == 0 ? () => _sounds.PlayFlick(card.GlobalPosition) : null);
-			card.BendTo(0, 0, 0.08f, delay: i * 0.018f);
+			drop = CardMotion.Slide(card, target, 0.1f, delay: i * 0.03f, landed: i % 2 == 0 ? () => _sounds.PlayFlick(card.GlobalPosition) : null);
+			card.BendTo(0, 0, 0.1f, delay: i * 0.03f);
 		}
 		await Done(drop);
 		// Push the interleaved halves together and square them.
@@ -244,11 +244,11 @@ public sealed class Shuffles
 			{
 				pile.Add(packet[k]);
 				int depth = pile.Count - 1;
-				move = CardMotion.Fly(packet[k], new Transform3D(basis, into + toward * (Dealer.CardThickness * depth)), 0.13f, lift: 0.05f);
+				move = CardMotion.Fly(packet[k], new Transform3D(basis, into + toward * (Dealer.CardThickness * depth)), 0.24f, lift: 0.06f);
 			}
 			_sounds.PlayFlick(into);
 			await Done(move);
-			await Wait(0.04f);
+			await Wait(0.16f);
 		}
 		// The pile, back to front, is the new deck bottom to top.
 		deck.Clear();
@@ -286,11 +286,11 @@ public sealed class Shuffles
 			for (int k = 0; k < packet.Count; k++)
 			{
 				pile.Add(packet[k]);
-				move = CardMotion.Fly(packet[k], new Transform3D(basis, below + up * (Dealer.CardThickness * pile.Count)), 0.16f, lift: 0.04f);
+				move = CardMotion.Fly(packet[k], new Transform3D(basis, below + up * (Dealer.CardThickness * pile.Count)), 0.26f, lift: 0.05f);
 			}
 			_sounds.PlayFlick(below);
 			await Done(move);
-			await Wait(0.05f);
+			await Wait(0.18f);
 		}
 		deck.Clear();
 		deck.AddRange(pile);
@@ -314,7 +314,7 @@ public sealed class Shuffles
 		var phase = deck.Select(_ => (float)_random.NextDouble() * Mathf.Tau).ToList();
 		var origin = deck.Select(c => c.GlobalPosition).ToList();
 		var spin = deck.Select(c => c.GlobalTransform.Basis.GetEuler().Y).ToList();
-		const float seconds = 2.6f;
+		const float seconds = 3.6f;
 		var tween = _host.CreateTween();
 		tween.TweenMethod(Callable.From<float>(t =>
 		{
@@ -353,7 +353,7 @@ public sealed class Shuffles
 		for (int i = 0; i < top.Count; i++)
 		{
 			int p = i % piles;
-			last = _dealer.Deal(top[i], place[p], stacks[p].Count, delay: i * 0.04f);
+			last = _dealer.Deal(top[i], place[p], stacks[p].Count, delay: i * 0.07f);
 			stacks[p].Add(top[i]);
 		}
 		await Done(last);
@@ -402,7 +402,7 @@ public sealed class Shuffles
 		{
 			bool fromLow = low.Contains(order[i]);
 			var target = new Transform3D(basis, spot + along * (fromLow ? -0.22f : 0.22f) + up * (Dealer.CardThickness * 0.5f * i));
-			weave = CardMotion.Slide(order[i], target, 0.5f);
+			weave = CardMotion.Slide(order[i], target, 0.9f, delay: i * 0.004f);
 		}
 		HandTo(Left, Hand(spot - along * 0.52f - up * 0.1f, along, up), 0.5f);
 		HandTo(Right, Hand(spot + along * 0.52f - up * 0.1f, -along, up), 0.5f);
