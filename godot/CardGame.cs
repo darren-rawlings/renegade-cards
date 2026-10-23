@@ -203,6 +203,16 @@ public abstract partial class CardGame : Node3D
 				GetTree().ReloadCurrentScene();
 			});
 		}
+		var styles = Enum.GetValues<ShuffleStyle>();
+		Hud.AddChoice("Shuffle", new[] { "Mixed (a different one each deal)" }.Concat(styles.Select(Shuffles.Name)).ToArray(),
+			ChosenShuffle is { } chosen ? Array.IndexOf(styles, chosen) + 1 : 0, choice =>
+			{
+				if (choice == 0)
+					Settings.Extra.Remove("shuffle");
+				else
+					Settings.Extra["shuffle"] = styles[choice - 1].ToString();
+				Settings.Save();
+			});
 		var speeds = new[] { 1, 2, 3 };
 		Hud.AddChoice("Speed", new[] { "Normal", "2×", "3×" }, System.Array.IndexOf(speeds, Speed) is int at and >= 0 ? at : 0, choice =>
 		{
@@ -437,7 +447,10 @@ public abstract partial class CardGame : Node3D
 		{
 			Hud.SetStatus("Shuffling…", Muted);
 			await Pause(0.3f);
-			await Dealer.Riffle(stack, Table.Centre, times: 2);
+			// A different way of shuffling each deal (or the one chosen in Settings).
+			var style = ChosenShuffle ?? (ShuffleStyle)Random.Next(Enum.GetValues<ShuffleStyle>().Length);
+			DevLog.Write($"shuffle: {style}");
+			await Shuffler().Play(style, stack, Table.Centre);
 		}
 		// The shuffle moved the card objects around; give them the order wanted, top first.
 		var top = new List<Card3D>(order.Count);
@@ -448,6 +461,44 @@ public abstract partial class CardGame : Node3D
 			top.Add(node);
 		}
 		return top;
+	}
+
+	/// <summary>The shuffle chosen in Settings › Shuffle, or null for a different one each deal.</summary>
+	protected ShuffleStyle? ChosenShuffle => Saved<ShuffleStyle>("shuffle", (ShuffleStyle)(-1)) is var s && Enum.IsDefined(s) ? s : null;
+
+	private Shuffles? _shuffles;
+
+	/// <summary>
+	/// The shuffles, done with your own hands (resting where they rest at your seat); a game where
+	/// you hold no cards borrows a pair that only appear for the shuffle.
+	/// </summary>
+	private Shuffles Shuffler()
+	{
+		if (_shuffles != null)
+			return _shuffles;
+		GlassHand Spare(bool right)
+		{
+			var hand = new GlassHand(right, GlassTint, HandPose.Rest);
+			AddChild(hand);
+			hand.WarmUp();
+			return hand;
+		}
+		var seat = Hands[0];
+		var left = seat?.Holder ?? Spare(false);
+		var right = seat?.Worker ?? Spare(true);
+		var leftRest = seat?.Holder != null ? seat.HolderRestingPose : Shuffles.PalmDownAt(Table.HolderRest[0] with { Y = CardTable.FeltY }, Vector3.Forward);
+		var rightRest = seat != null ? seat.RestingPose : Shuffles.PalmDownAt(Table.HandRest[0] with { Y = CardTable.FeltY }, Vector3.Forward);
+		_shuffles = new Shuffles(this, Sounds, Random, Table.Camera.GlobalPosition, left, right)
+		{
+			LeftRest = leftRest,
+			RightRest = rightRest,
+			HideWhenResting = seat == null,
+		};
+		if (seat == null)
+			_shuffles.Rest(Table.Centre);
+		else if (seat.Holder == null)
+			left.GlobalTransform = leftRest;
+		return _shuffles;
 	}
 
 	/// <summary>Deals cards from the top of the stack to the seats' piles, one at a time round the table.</summary>

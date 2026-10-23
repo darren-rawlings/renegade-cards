@@ -40,7 +40,7 @@ public sealed class Shuffles
 
 	public static string Name(ShuffleStyle style) => style switch
 	{
-		ShuffleStyle.RiffleBridge => "Riffle and bridge (now)",
+		ShuffleStyle.RiffleBridge => "Riffle and bridge",
 		ShuffleStyle.TableRiffle => "Table riffle",
 		ShuffleStyle.Overhand => "Overhand",
 		ShuffleStyle.Hindu => "Hindu",
@@ -70,6 +70,7 @@ public sealed class Shuffles
 
 	public async Task Play(ShuffleStyle style, List<Card3D> deck, Vector3 at)
 	{
+		Left.Visible = Right.Visible = style != ShuffleStyle.Pile || !HideWhenResting;
 		switch (style)
 		{
 			case ShuffleStyle.RiffleBridge: await _dealer.Riffle(deck, at, times: 1, Left, Right); break;
@@ -80,6 +81,7 @@ public sealed class Shuffles
 			case ShuffleStyle.Pile: await Pile(deck, at); break;
 			default: await Faro(deck, at); break;
 		}
+		Left.Visible = Right.Visible = !HideWhenResting;
 	}
 
 	// ------------------------------------------------------------------ Helpers
@@ -118,24 +120,39 @@ public sealed class Shuffles
 		return new Transform3D(new Basis(x, y, z), palmAt);
 	}
 
+	/// <summary>Where the hands lie between shuffles (in a game, the dealer's own resting places); unset, beside the deck.</summary>
+	public Transform3D? LeftRest { get; set; }
+	public Transform3D? RightRest { get; set; }
+
+	/// <summary>Hands that only appear for the shuffle (solitaire games have none of their own).</summary>
+	public bool HideWhenResting { get; set; }
+
+	private Transform3D LeftHome(Vector3 at) => LeftRest ?? Hand(at + new Vector3(-1.3f, 0.12f, 1.4f), Vector3.Down, new Vector3(0.3f, 0, -1));
+	private Transform3D RightHome(Vector3 at) => RightRest ?? Hand(at + new Vector3(1.3f, 0.12f, 1.4f), Vector3.Down, new Vector3(-0.3f, 0, -1));
+
+	/// <summary>A hand lying palm down on the felt at a point, fingers along a direction.</summary>
+	public static Transform3D PalmDownAt(Vector3 at, Vector3 fingers) => Hand(at + Vector3.Up * 0.115f, Vector3.Down, fingers);
+
 	public void Rest(Vector3 at)
 	{
 		Left.Pose = HandPose.Rest;
 		Right.Pose = HandPose.Rest;
-		Left.GlobalTransform = Hand(at + new Vector3(-1.3f, 0.12f, 1.4f), Vector3.Down, new Vector3(0.3f, 0, -1));
-		Right.GlobalTransform = Hand(at + new Vector3(1.3f, 0.12f, 1.4f), Vector3.Down, new Vector3(-0.3f, 0, -1));
+		Left.GlobalTransform = LeftHome(at);
+		Right.GlobalTransform = RightHome(at);
+		Left.Visible = Right.Visible = !HideWhenResting;
 	}
 
 	private async Task ToRest(Vector3 at)
 	{
 		Left.Pose = HandPose.Relaxed;
 		Right.Pose = HandPose.Relaxed;
-		var a = HandTo(Left, Hand(at + new Vector3(-1.3f, 0.12f, 1.4f), Vector3.Down, new Vector3(0.3f, 0, -1)), 0.35f);
-		var b = HandTo(Right, Hand(at + new Vector3(1.3f, 0.12f, 1.4f), Vector3.Down, new Vector3(-0.3f, 0, -1)), 0.35f);
+		var a = HandTo(Left, LeftHome(at), 0.35f);
+		var b = HandTo(Right, RightHome(at), 0.35f);
 		await Done(a);
 		await Done(b);
 		Left.Pose = HandPose.Rest;
 		Right.Pose = HandPose.Rest;
+		Left.Visible = Right.Visible = !HideWhenResting;
 	}
 
 	private List<int> Packets(int count, int min, int max)
@@ -143,7 +160,9 @@ public sealed class Shuffles
 		var sizes = new List<int>();
 		while (count > 0)
 		{
-			int n = Math.Min(count, _random.Next(min, max + 1));
+			// A double deck (Spider) moves in bigger packets, so it takes no longer.
+			int scale = Math.Max(1, (count + sizes.Sum()) / 52);
+			int n = Math.Min(count, _random.Next(min, max + 1) * scale);
 			sizes.Add(n);
 			count -= n;
 		}
@@ -404,7 +423,7 @@ public sealed class Shuffles
 		for (int i = 0; i < top.Count; i++)
 		{
 			int p = i % piles;
-			last = _dealer.Deal(top[i], place[p], stacks[p].Count, delay: i * 0.07f);
+			last = _dealer.Deal(top[i], place[p], stacks[p].Count, delay: i * 0.07f * Math.Min(1f, 52f / top.Count));
 			stacks[p].Add(top[i]);
 		}
 		await Done(last);
