@@ -29,7 +29,7 @@ public sealed class Shuffles
 		_sounds = sounds;
 		_random = random;
 		_eye = eye;
-		_dealer = new Dealer(host, sounds, random);
+		_dealer = new Dealer(host, sounds, random) { Eye = eye };
 		Left = left;
 		Right = right;
 	}
@@ -87,7 +87,7 @@ public sealed class Shuffles
 	// ------------------------------------------------------------------ Helpers
 
 	/// <summary>Where an in-the-air shuffle happens: lifted towards the player, as the riffle does.</summary>
-	private static Vector3 Air(Vector3 at) => at + new Vector3(0, 3.2f, 3.35f);
+	private Vector3 Air(Vector3 at) => _dealer.Spot(at);
 
 	/// <summary>Turns a card to face (its back) towards the player, standing; landscape turns it on its long side.</summary>
 	private Basis Standing(Vector3 where, bool landscape, float tilt = 0)

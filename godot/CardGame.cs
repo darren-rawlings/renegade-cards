@@ -151,7 +151,7 @@ public abstract partial class CardGame : Node3D
 		var pool = new SoundPool();
 		AddChild(pool);
 		Sounds = new CardSounds(pool);
-		Dealer = new Dealer(this, Sounds, Random);
+		Dealer = new Dealer(this, Sounds, Random) { Eye = Table.Camera.GlobalPosition };
 		Looks = await CardLooks.Create(this, Saved("front", CardFront.Classic), Saved("back", CardBack.Crimson));
 
 		if (HoldsCards && !Solitaire)
