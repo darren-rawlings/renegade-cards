@@ -457,6 +457,13 @@ public sealed class Shuffles
 		HandTo(Right, Dealer.PalmOn(Place(1, 0.34f, order.Count), 0.12f), 0.9f);
 		await Done(weave);
 		_sounds.PlayFlick(spot);
+		// Squeezed the rest of the way together before the bow.
+		Tween? squeeze = null;
+		for (int i = 0; i < order.Count; i++)
+			squeeze = CardMotion.Slide(order[i], Place(low.Contains(order[i]) ? -1 : 1, 0.035f, i), 0.25f);
+		HandTo(Left, Dealer.PalmOn(Place(-1, 0.3f, order.Count), 0.12f), 0.25f);
+		HandTo(Right, Dealer.PalmOn(Place(1, 0.3f, order.Count), 0.12f), 0.25f);
+		await Done(squeeze);
 		// Bowed up as one block, the hands pressing down on the ends, then released to cascade together.
 		Tween? bow = null;
 		foreach (var card in order)
