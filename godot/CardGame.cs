@@ -174,6 +174,9 @@ public abstract partial class CardGame : Node3D
 					? new CardFan(Table.FanPivot[0], sorted: SortYourHand)
 					: new CardFan(Table.FanPivot[s], sorted: false) { Radius = 0.5f, Spread = 9f, MaxArc = 80f };
 				Hands[s] = new SeatHands(this, Sounds, Table.FanPivot[s], GlassTint, Table.HandRest[s], HoldsFan, Table.HolderRest[s], yours: s == 0);
+				// Out of cards, the holding hand goes back down to its place.
+				var hands = Hands[s];
+				Fans[s].Emptied += () => hands.Hold(false);
 			}
 		}
 		Table.SetCloth(Saved("cloth", TableCloth.Green));

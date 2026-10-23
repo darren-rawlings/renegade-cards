@@ -43,11 +43,16 @@ public sealed class CardFan
 		Order();
 	}
 
+	/// <summary>The last card has left the fan (its holder can put their hand down).</summary>
+	public event System.Action? Emptied;
+
 	public void Remove(Card3D card)
 	{
-		_cards.Remove(card);
+		bool had = _cards.Remove(card);
 		_raised.Remove(card.Card.Rank);
 		_raisedCards.Remove(card);
+		if (had && _cards.Count == 0)
+			Emptied?.Invoke();
 	}
 
 	public void Clear()
