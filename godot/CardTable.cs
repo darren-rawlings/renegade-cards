@@ -161,6 +161,86 @@ public partial class CardTable : Node3D
 	/// <summary>How far either side of the middle your hands rest (on the ends of your place setting).</summary>
 	public float YourHandsApart { get; set; } = 1.75f;
 
+	/// <summary>How far down the table (z) your cards in play lie, clear of your fan (see <see cref="SetByEye"/>).</summary>
+	public float YourPlayZ { get; private set; } = 0.3f;
+
+	/// <summary>
+	/// The strip down the right of the table that Cribbage stands its (three-lane) board in: how
+	/// long it is, how high it stands, and how far in from the right edge of the felt. Every game's
+	/// far place settings line up with its top, and the side settings sit as far in from the edges.
+	/// </summary>
+	public const float StripLength = 3.734f, StripHeight = 0.07f, SideMargin = 0.566f;
+
+	/// <summary>Where a point on the felt (or above it) at a distance down the table shows on screen, top to bottom.</summary>
+	public float ScreenY(float z, float height = FeltY) => Camera.UnprojectPosition(new Vector3(0, height, z)).Y;
+
+	/// <summary>How far down the table (z) the felt is under a height on the screen.</summary>
+	public float FeltAt(float screenY)
+	{
+		var (origin, direction) = Ray(new Vector2(GetViewport().GetVisibleRect().Size.X / 2, screenY));
+		return (origin + direction * ((FeltY - origin.Y) / direction.Y)).Z;
+	}
+
+	/// <summary>Finds a z where a measure that grows as things move towards you reaches a target.</summary>
+	public static float Solve(System.Func<float, float> measure, float target)
+	{
+		float lo = -5, hi = 5;
+		for (int i = 0; i < 40; i++)
+		{
+			float mid = (lo + hi) / 2;
+			if (measure(mid) < target)
+				lo = mid;
+			else
+				hi = mid;
+		}
+		return (lo + hi) / 2;
+	}
+
+	/// <summary>The far end (z) of the strip (<see cref="StripLength"/>): as far below the felt's far edge as its near end is above the felt's near edge, on screen.</summary>
+	public float StripFar() => Solve(z => (ScreenY(z, StripHeight) - ScreenY(FeltFar)) - (ScreenY(FeltNear) - ScreenY(z + StripLength, StripHeight)), 0);
+
+	/// <summary>
+	/// Sets the table by eye, as it looks on the screen, the same however many play: your place
+	/// setting (the same size as everyone's) sits just above the status line, whose top is
+	/// <paramref name="statusTop"/> down the screen; the settings across the table have their near
+	/// edges level with the top of the strip (<see cref="StripFar"/>); the players at the sides
+	/// have theirs halfway between those and yours, <see cref="SideMargin"/> in from the edges of
+	/// the felt, each sitting just inboard of their setting so their fan stays on screen. Three
+	/// players sit left and right (or, with <paramref name="acrossAtThree"/>, left and across, when
+	/// the right is taken); <paramref name="rightAt"/> moves the right-hand setting in (its x).
+	/// Your cards in play go just above the top of your fan (<see cref="YourPlayZ"/>).
+	/// </summary>
+	public void SetByEye(int seats, float statusTop, float? rightAt = null, bool acrossAtThree = false)
+	{
+		const float acrossHalf = 0.575f, fiveHalf = 0.55f, sideHalf = 0.875f, sideDepth = 1.0f, inboard = 0.45f;
+		YourMatSize = new Vector2(2.0f, 1.15f);
+		YourHandsApart = 0.72f;
+		YourPlace = FeltAt(statusTop - 6) - YourHalfDepth;
+		float yoursTop = ScreenY(YourPlace - YourHalfDepth);
+		float line = ScreenY(StripFar(), StripHeight);
+		float far = FeltAt(line);
+		float level = Solve(z => (ScreenY(z - sideHalf) - line) - (yoursTop - ScreenY(z + sideHalf)), 0);
+		float leftMat = -FeltHalfWidth + SideMargin + sideDepth / 2;
+		float rightMat = rightAt ?? -leftMat;
+		var left = new Place(new Vector2(leftMat + inboard, level), Vector2.Right, -inboard);
+		var right = new Place(new Vector2(rightMat - inboard, level), Vector2.Left, -inboard);
+		var across = new Place(new Vector2(0, far - acrossHalf - 0.75f), Vector2.Down);
+		Layout = seats switch
+		{
+			2 => new[] { across },
+			3 => acrossAtThree ? new[] { left, across } : new[] { left, right },
+			4 => new[] { left, across, right },
+			_ => new[] { left, new Place(new Vector2(-1.05f, far - fiveHalf - 0.75f), Vector2.Down), new Place(new Vector2(1.05f, far - fiveHalf - 0.75f), Vector2.Down), right },
+		};
+		// The middle of the table: between the side settings, level with them.
+		float middle = rightAt is { } inner ? (leftMat + sideDepth / 2 + inner - sideDepth / 2) / 2 : 0;
+		Centre = new Vector3(middle, FeltY, level);
+		Arrange(seats);
+		// Your fan's top: a raised card in it (CardFan's radius is 0.62; raised cards stand 0.16 higher).
+		var fanTop = FanPivot[0] * new Vector3(0, 0.62f + 0.16f + Card3D.Height / 2, 0);
+		YourPlayZ = FeltAt(Camera.UnprojectPosition(fanTop).Y - 10) - Card3D.Height / 2;
+	}
+
 	/// <summary>Seats a number of players (2 to 5) and works out every seat's places.</summary>
 	public void Arrange(int seats)
 	{
@@ -173,8 +253,9 @@ public partial class CardTable : Node3D
 		float z = YourPlace;
 		Toward[0] = Vector3.Forward;
 		Pile[0] = new Vector3(0, FeltY, z + 0.1f);
-		Winnings[0] = new Vector3(1.45f, FeltY, z - 0.65f);
-		Landing[0] = new Vector3(-1.2f, FeltY, z - 0.7f);
+		// What you win, and what's thrown to you, beside your place setting (clear of your fan).
+		Winnings[0] = new Vector3(YourMatSize.X / 2 + 0.5f, FeltY, z - 0.1f);
+		Landing[0] = new Vector3(-(YourMatSize.X / 2 + 0.5f), FeltY, z - 0.1f);
 		Bubble[0] = new Vector3(0, 1.2f, 1.3f);
 		HandRest[0] = new Vector3(YourHandsApart, FeltY, z + 0.3f);
 		HolderRest[0] = new Vector3(-YourHandsApart, FeltY, z + 0.3f);

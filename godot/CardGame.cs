@@ -100,11 +100,14 @@ public abstract partial class CardGame : Node3D
 	protected virtual void AddSettings() { }
 
 	/// <summary>
-	/// For a game that needs room on the table for something of its own: called once the table and
-	/// its camera are up, before anyone's hands are made, to set <see cref="CardTable.Layout"/> and
-	/// <see cref="CardTable.YourPlace"/> and call <see cref="CardTable.Arrange"/> again.
+	/// Sets the table round the players once it and its camera are up, before anyone's hands are
+	/// made: by eye (<see cref="CardTable.SetByEye"/>), just above the status line. A game that needs
+	/// room on the table for something of its own (Cribbage's board) does it its own way.
 	/// </summary>
-	protected virtual void LayOut(CardTable table) { }
+	protected virtual void LayOut(CardTable table) => table.SetByEye(Players, StatusTop);
+
+	/// <summary>How far down the screen the status line's top is (GameHud's: 250 up from the bottom).</summary>
+	protected float StatusTop => GetViewport().GetVisibleRect().Size.Y - 250;
 
 	/// <summary>A game's own developer flag (after the shared ones).</summary>
 	protected virtual void DevArg(string name, string value) { }
