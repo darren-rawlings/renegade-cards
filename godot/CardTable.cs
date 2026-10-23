@@ -24,9 +24,6 @@ public partial class CardTable : Node3D
 	/// <summary>The edges of the felt (not solitaire): half its width, and its far and near ends.</summary>
 	public const float FeltHalfWidth = 3.0f, FeltFar = -4.3f, FeltNear = 3.1f;
 
-	/// <summary>Half the depth of your place setting (it's 1.25 deep).</summary>
-	public const float YourHalfDepth = 0.625f;
-
 	/// <summary>
 	/// Where another player sits (x, z on the felt), which way they face, and how far in front of
 	/// them their place setting lies (its centre).
@@ -153,6 +150,14 @@ public partial class CardTable : Node3D
 	/// <summary>How far down the table (z) your place setting's centre lies, and your hands and piles with it.</summary>
 	public float YourPlace { get; set; } = 1.15f;
 
+	/// <summary>The size of your place setting (across, deep).</summary>
+	public Vector2 YourMatSize { get; set; } = new(3.6f, 1.25f);
+
+	public float YourHalfDepth => YourMatSize.Y / 2;
+
+	/// <summary>How far either side of the middle your hands rest (on the ends of your place setting).</summary>
+	public float YourHandsApart { get; set; } = 1.75f;
+
 	/// <summary>Seats a number of players (2 to 5) and works out every seat's places.</summary>
 	public void Arrange(int seats)
 	{
@@ -167,13 +172,13 @@ public partial class CardTable : Node3D
 		Winnings[0] = new Vector3(1.45f, FeltY, z - 0.65f);
 		Landing[0] = new Vector3(-1.2f, FeltY, z - 0.7f);
 		Bubble[0] = new Vector3(0, 1.2f, 1.3f);
-		HandRest[0] = new Vector3(1.75f, FeltY, z + 0.3f);
-		HolderRest[0] = new Vector3(-1.75f, FeltY, z + 0.3f);
+		HandRest[0] = new Vector3(YourHandsApart, FeltY, z + 0.3f);
+		HolderRest[0] = new Vector3(-YourHandsApart, FeltY, z + 0.3f);
 
 		foreach (var mat in _mats)
 			mat.QueueFree();
 		_mats.Clear();
-		AddMat(new Vector3(0, FeltY, z), 0, new Vector2(3.6f, YourHalfDepth * 2), TableTalk.SeatColour(0));
+		AddMat(new Vector3(0, FeltY, z), 0, YourMatSize, TableTalk.SeatColour(0));
 
 		for (int s = 1; s < Seats; s++)
 		{
