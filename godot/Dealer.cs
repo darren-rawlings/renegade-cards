@@ -14,6 +14,9 @@ public sealed class Dealer
 {
 	public const float CardThickness = 0.0035f;
 
+	/// <summary>How far apart the riffled halves stay until the bridge pushes them together (along the cards' length).</summary>
+	private const float Meshed = 0.09f;
+
 	private readonly Node3D _host;
 	private readonly CardSounds _sounds;
 	private readonly Random _random;
@@ -99,21 +102,26 @@ public sealed class Dealer
 			for (int i = 0; i < order.Count; i++)
 			{
 				var card = order[i];
-				var target = new Transform3D(stacked, spot - stacked.Z * (CardThickness * i) + new Vector3(((float)_random.NextDouble() - 0.5f) * 0.03f, 0, 0));
+				// The halves mesh but stay a little apart, each overlapping the other by most of its length.
+				int side = left.Contains(card) ? -1 : 1;
+				var target = new Transform3D(stacked, spot - stacked.Z * (CardThickness * i) - stacked.Y * (side * Meshed));
 				riffle = CardMotion.Fly(card, target, 0.1f, lift: 0.03f, delay: i * 0.02f, landed: () => _sounds.PlayFlick(card.GlobalPosition));
 				// Let go: it springs straight as it drops.
 				card.BendTo(0, 0, 0.09f, delay: i * 0.02f);
 			}
 			await _host.ToSignal(riffle!, Tween.SignalName.Finished);
 
-			// The bridge: the deck is bent up into an arch, then let go so the cards cascade down,
-			// one after another, back into a neat stack.
+			// The bridge: the meshed deck is bowed up as one block (fingers pressing down on the ends,
+			// thumbs pushing up underneath the middle), then let go so the cards cascade down one after
+			// another while the halves slide together into a neat stack.
 			Tween? arch = null;
+			var bowed = Sideways(0.68f);
 			for (int i = 0; i < order.Count; i++)
 			{
-				arch = CardMotion.Slide(order[i], Arched(spot, i, order.Count), 0.22f);
-				// Fingers on top, thumbs underneath: every card bows up in the middle.
-				order[i].BendTo(-0.15f, 0, 0.22f);
+				int side = left.Contains(order[i]) ? -1 : 1;
+				var raised = spot + Vector3.Up * 0.06f - bowed.Z * (CardThickness * i) - bowed.Y * (side * Meshed);
+				arch = CardMotion.Slide(order[i], new Transform3D(bowed, raised), 0.3f);
+				order[i].BendTo(-0.17f, 0, 0.3f);
 			}
 			await _host.ToSignal(arch!, Tween.SignalName.Finished);
 			Tween? cascade = null;
@@ -122,8 +130,8 @@ public sealed class Dealer
 				var card = order[i];
 				int k = order.Count - 1 - i;
 				var target = new Transform3D(stacked, spot - stacked.Z * (CardThickness * i));
-				cascade = CardMotion.Slide(card, target, 0.08f, delay: k * 0.013f, landed: k % 2 == 0 ? () => _sounds.PlayFlick(card.GlobalPosition) : null);
-				card.BendTo(0, 0, 0.1f, delay: k * 0.013f);
+				cascade = CardMotion.Slide(card, target, 0.1f, delay: k * 0.014f, landed: k % 2 == 0 ? () => _sounds.PlayFlick(card.GlobalPosition) : null);
+				card.BendTo(0, 0, 0.1f, delay: k * 0.014f);
 			}
 			await _host.ToSignal(cascade!, Tween.SignalName.Finished);
 			_sounds.PlayKnock(spot);
@@ -144,18 +152,6 @@ public sealed class Dealer
 	{
 		var basis = new Basis(Vector3.Back, side * 0.32f) * Sideways();
 		var position = spot + new Vector3(side * 0.5f, 0.02f, 0) - basis.Z * (CardThickness * index);
-		return new Transform3D(basis, position);
-	}
-
-	/// <summary>A card's place in the bridge: the stack bowed up in the middle, ends held low.</summary>
-	private static Transform3D Arched(Vector3 spot, int index, int count)
-	{
-		float t = count > 1 ? index / (count - 1f) : 0.5f;
-		// The middle cards rise most; each card leans along the curve.
-		float rise = 0.22f * Mathf.Sin(t * Mathf.Pi);
-		float lean = (t - 0.5f) * 0.9f;
-		var basis = new Basis(Vector3.Back, -lean) * Sideways(0.75f);
-		var position = spot + new Vector3((t - 0.5f) * 0.32f, rise + 0.08f, 0) - basis.Z * (CardThickness * index * 0.5f);
 		return new Transform3D(basis, position);
 	}
 
