@@ -161,6 +161,9 @@ public partial class CardTable : Node3D
 	/// <summary>How far either side of the middle your hands rest (on the ends of your place setting).</summary>
 	public float YourHandsApart { get; set; } = 1.75f;
 
+	/// <summary>How far down the screen the fans across the table must keep below (the log's bottom edge; 0 for anywhere).</summary>
+	public float FarFansBelow { get; set; }
+
 	/// <summary>How far down the table (z) your cards in play lie, clear of your fan (see <see cref="SetByEye"/>).</summary>
 	public float YourPlayZ { get; private set; } = 0.3f;
 
@@ -205,9 +208,11 @@ public partial class CardTable : Node3D
 	/// <paramref name="statusTop"/> down the screen; the settings across the table have their near
 	/// edges level with the top of the strip (<see cref="StripFar"/>); the players at the sides
 	/// have theirs halfway between those and yours, <see cref="SideMargin"/> in from the edges of
-	/// the felt, each sitting just inboard of their setting so their fan stays on screen. Three
-	/// players sit left and right (or, with <paramref name="acrossAtThree"/>, left and across, when
-	/// the right is taken); <paramref name="rightAt"/> moves the right-hand setting in (its x).
+	/// the felt, each sitting just inboard of their setting so their fan stays on screen. The fans
+	/// across the table are held low enough to stay clear of the log at the top
+	/// (<see cref="FarFansBelow"/>). Three players sit left and right (or, with
+	/// <paramref name="acrossAtThree"/>, left and across, when the right is taken);
+	/// <paramref name="rightAt"/> moves the right-hand setting in (its x).
 	/// Your cards in play go just above the top of your fan (<see cref="YourPlayZ"/>).
 	/// </summary>
 	public void SetByEye(int seats, float statusTop, float? rightAt = null, bool acrossAtThree = false)
@@ -215,6 +220,7 @@ public partial class CardTable : Node3D
 		const float acrossHalf = 0.575f, fiveHalf = 0.55f, sideHalf = 0.875f, sideDepth = 1.0f, inboard = 0.45f;
 		YourMatSize = new Vector2(2.0f, 1.15f);
 		YourHandsApart = 0.72f;
+		FarFansBelow = TableTalk.Bottom + 8;
 		YourPlace = FeltAt(statusTop - 6) - YourHalfDepth;
 		float yoursTop = ScreenY(YourPlace - YourHalfDepth);
 		float line = ScreenY(StripFar(), StripHeight);
@@ -274,11 +280,22 @@ public partial class CardTable : Node3D
 			var r = f.Cross(Vector3.Up);
 			var seat = new Vector3(at.X, FeltY, at.Y);
 
-			var fan = seat + Vector3.Up * (side ? 0.8f : 0.62f);
 			// Each fan faces its player, and leans a little away from you so you see its backs spread rather than edge-on.
-			var away = (fan - eye).Normalized();
-			var forward = (-f * 0.55f + away * 0.45f).Normalized();
-			FanPivot[s] = new Transform3D(Basis.LookingAt(-forward, Vector3.Up), fan);
+			Transform3D Held(Vector3 at)
+			{
+				var away = (at - eye).Normalized();
+				var forward = (-f * 0.55f + away * 0.45f).Normalized();
+				return new Transform3D(Basis.LookingAt(-forward, Vector3.Up), at);
+			}
+			var fan = seat + Vector3.Up * (side ? 0.8f : 0.62f);
+			FanPivot[s] = Held(fan);
+			// Across the table, the fan comes forward and down over the setting until its top is clear of
+			// the log (other players' fans are 0.5 out from where they're held; a card sticks up 0.16 when raised).
+			for (int i = 0; !side && FarFansBelow > 0 && i < 24 && Camera.UnprojectPosition(FanPivot[s] * new Vector3(0, 0.5f + Card3D.Height / 2 + 0.16f, 0)).Y < FarFansBelow; i++)
+			{
+				fan += f * 0.04f + Vector3.Down * 0.015f;
+				FanPivot[s] = Held(fan);
+			}
 
 			// The place setting in front of them, square to the table, with everything on it.
 			var mat = seat + f * reach;

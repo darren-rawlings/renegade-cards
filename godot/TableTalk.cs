@@ -15,6 +15,9 @@ public partial class TableTalk : Control
 	public const int VisibleLines = 3;
 	private const int FontSize = 24, LineHeight = 36;
 
+	/// <summary>How far down the screen the log's bottom edge is (the table keeps the far fans below it).</summary>
+	public const int Bottom = 206 + VisibleLines * LineHeight + 14;
+
 	private readonly ScrollContainer _scroll;
 	private readonly VBoxContainer _lines;
 	private readonly List<(RichTextLabel Label, int Round)> _said = new();
@@ -30,7 +33,7 @@ public partial class TableTalk : Control
 		OffsetLeft = 20;
 		OffsetRight = -20;
 		OffsetTop = 206;
-		OffsetBottom = 206 + VisibleLines * LineHeight + 14;
+		OffsetBottom = Bottom;
 		MouseFilter = MouseFilterEnum.Ignore;
 
 		var panel = new PanelContainer { MouseFilter = MouseFilterEnum.Ignore };

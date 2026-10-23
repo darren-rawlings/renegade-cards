@@ -274,6 +274,30 @@ public abstract partial class CardGame : Node3D
 		Settings.Save();
 	}
 
+	/// <summary>
+	/// A match in progress (games won by each side, say), kept between launches: one for each number
+	/// of players. Zeros if none has been saved (and in the demo, which plays its own and keeps none).
+	/// </summary>
+	protected int[] SavedMatch(int sides)
+	{
+		var tally = new int[sides];
+		if (!Demo && Settings.Extra.TryGetValue($"match{Players}", out var text))
+		{
+			var parts = text.Split(',');
+			for (int i = 0; i < sides && i < parts.Length; i++)
+				int.TryParse(parts[i], out tally[i]);
+		}
+		return tally;
+	}
+
+	protected void SaveMatch(IEnumerable<int> tally)
+	{
+		if (Demo)
+			return;
+		Settings.Extra[$"match{Players}"] = string.Join(",", tally);
+		Settings.Save();
+	}
+
 	protected bool Flag(string key, bool fallback = false) => Settings.Extra.TryGetValue(key, out var on) ? on == "on" : fallback;
 
 	protected void SetFlag(string key, bool on)
