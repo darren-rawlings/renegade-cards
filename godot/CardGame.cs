@@ -790,6 +790,9 @@ public abstract partial class CardGame : Node3D
 					_shuffleLab = true;
 					_shuffleStyle = Enum.TryParse<ShuffleStyle>(value, out var style) ? style : null;
 					break;
+				case "--deal-shuffle":
+					Settings.Extra["shuffle"] = value;
+					break;
 				case "--quit-after-shuffle":
 					_quitAfterShuffle = true;
 					break;
