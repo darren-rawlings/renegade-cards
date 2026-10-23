@@ -203,16 +203,6 @@ public abstract partial class CardGame : Node3D
 				GetTree().ReloadCurrentScene();
 			});
 		}
-		var styles = Enum.GetValues<ShuffleStyle>();
-		Hud.AddChoice("Shuffle", new[] { "Mixed (a different one each deal)" }.Concat(styles.Select(Shuffles.Name)).ToArray(),
-			ChosenShuffle is { } chosen ? Array.IndexOf(styles, chosen) + 1 : 0, choice =>
-			{
-				if (choice == 0)
-					Settings.Extra.Remove("shuffle");
-				else
-					Settings.Extra["shuffle"] = styles[choice - 1].ToString();
-				Settings.Save();
-			});
 		var speeds = new[] { 1, 2, 3 };
 		Hud.AddChoice("Speed", new[] { "Normal", "2×", "3×" }, System.Array.IndexOf(speeds, Speed) is int at and >= 0 ? at : 0, choice =>
 		{
@@ -447,7 +437,7 @@ public abstract partial class CardGame : Node3D
 		{
 			Hud.SetStatus("Shuffling…", Muted);
 			await Pause(0.3f);
-			// A different way of shuffling each deal (or the one chosen in Settings).
+			// A different way of shuffling each deal.
 			var style = ChosenShuffle ?? (ShuffleStyle)Random.Next(Enum.GetValues<ShuffleStyle>().Length);
 			DevLog.Write($"shuffle: {style}");
 			await Shuffler().Play(style, stack, Table.Centre);
@@ -463,8 +453,8 @@ public abstract partial class CardGame : Node3D
 		return top;
 	}
 
-	/// <summary>The shuffle chosen in Settings › Shuffle, or null for a different one each deal.</summary>
-	protected ShuffleStyle? ChosenShuffle => Saved<ShuffleStyle>("shuffle", (ShuffleStyle)(-1)) is var s && Enum.IsDefined(s) ? s : null;
+	/// <summary>A shuffle forced for checks (--deal-shuffle=Name), or null: a different one each deal (players never choose).</summary>
+	protected ShuffleStyle? ChosenShuffle { get; private set; }
 
 	private Shuffles? _shuffles;
 
@@ -791,7 +781,7 @@ public abstract partial class CardGame : Node3D
 					_shuffleStyle = Enum.TryParse<ShuffleStyle>(value, out var style) ? style : null;
 					break;
 				case "--deal-shuffle":
-					Settings.Extra["shuffle"] = value;
+					ChosenShuffle = Enum.TryParse<ShuffleStyle>(value, out var forced) ? forced : null;
 					break;
 				case "--quit-after-shuffle":
 					_quitAfterShuffle = true;
