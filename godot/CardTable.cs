@@ -132,6 +132,12 @@ public partial class CardTable : Node3D
 		new[] { (new Vector2(-1.78f, -0.3f), Vector2.Right), (new Vector2(-1.05f, -2.5f), Vector2.Down), (new Vector2(1.05f, -2.5f), Vector2.Down), (new Vector2(1.78f, -0.3f), Vector2.Left) },
 	};
 
+	/// <summary>
+	/// A game's own seating for the other players (same form as the usual one, one entry per seat
+	/// after yours), for when something of its own takes up part of the table. Null for the usual.
+	/// </summary>
+	public (Vector2 At, Vector2 Facing)[]? Layout { get; set; }
+
 	/// <summary>Seats a number of players (2 to 5) and works out every seat's places.</summary>
 	public void Arrange(int seats)
 	{
@@ -155,7 +161,7 @@ public partial class CardTable : Node3D
 
 		for (int s = 1; s < Seats; s++)
 		{
-			var (at, facing) = Around[Seats][s - 1];
+			var (at, facing) = Layout is { } layout && layout.Length == Seats - 1 ? layout[s - 1] : Around[Seats][s - 1];
 			bool side = facing.Y == 0;
 			// Facing (towards the table) and the player's own right, on the felt.
 			var f = new Vector3(facing.X, 0, facing.Y);

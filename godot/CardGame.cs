@@ -99,6 +99,12 @@ public abstract partial class CardGame : Node3D
 	/// <summary>Adds the game's own rows to Settings (use <see cref="GameHud.AddToggle"/> and AddChoice).</summary>
 	protected virtual void AddSettings() { }
 
+	/// <summary>
+	/// Where the other players sit, for a game that needs room on the table for something of its own
+	/// (see <see cref="CardTable.Layout"/>); null for the usual seating.
+	/// </summary>
+	protected virtual (Vector2 At, Vector2 Facing)[]? SeatLayout(int players) => null;
+
 	/// <summary>A game's own developer flag (after the shared ones).</summary>
 	protected virtual void DevArg(string name, string value) { }
 
@@ -146,7 +152,7 @@ public abstract partial class CardGame : Node3D
 
 	private async Task Start()
 	{
-		Table = new CardTable { Seats = Solitaire ? 1 : Players, Solitaire = Solitaire, SolitaireWidth = LayoutWidth };
+		Table = new CardTable { Seats = Solitaire ? 1 : Players, Solitaire = Solitaire, SolitaireWidth = LayoutWidth, Layout = SeatLayout(Players) };
 		AddChild(Table);
 		var pool = new SoundPool();
 		AddChild(pool);
