@@ -237,7 +237,7 @@ internal static class FrontPainter
 	private static void Joker(Control c, Vector2 origin, bool big, Palette palette, Color ink)
 	{
 		var font = ThemeDB.FallbackFont;
-		Vector2[] Star(Vector2 at, float outer, float inner)
+		Vector2[] CornerStar(Vector2 at, float outer, float inner)
 		{
 			var points = new Vector2[10];
 			for (int i = 0; i < 10; i++)
@@ -253,7 +253,7 @@ internal static class FrontPainter
 			string index = big ? "B" : "L";
 			var indexSize = font.GetStringSize(index, HorizontalAlignment.Left, -1, 46);
 			c.DrawString(font, new Vector2(-indexSize.X / 2, 0), index, HorizontalAlignment.Left, -1, 46, ink);
-			c.DrawColoredPolygon(Star(new Vector2(0, 24), 14, 6), ink);
+			c.DrawColoredPolygon(CornerStar(new Vector2(0, 24), 14, 6), ink);
 			const string word = "JOKER";
 			for (int i = 0; i < word.Length; i++)
 			{
