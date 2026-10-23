@@ -170,7 +170,7 @@ public abstract partial class CardGame : Node3D
 				Fans[s] = s == 0
 					? new CardFan(Table.FanPivot[0], sorted: SortYourHand)
 					: new CardFan(Table.FanPivot[s], sorted: false) { Radius = 0.5f, Spread = 9f, MaxArc = 80f };
-				Hands[s] = new SeatHands(this, Sounds, Table.FanPivot[s], GlassTint, Table.HandRest[s], HoldsFan, Table.HolderRest[s]);
+				Hands[s] = new SeatHands(this, Sounds, Table.FanPivot[s], GlassTint, Table.HandRest[s], HoldsFan, Table.HolderRest[s], yours: s == 0);
 			}
 		}
 		Table.SetCloth(Saved("cloth", TableCloth.Green));

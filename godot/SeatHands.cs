@@ -19,6 +19,7 @@ public sealed class SeatHands
 	private readonly Transform3D _seat;
 	private readonly Vector3? _rest;
 	private readonly Vector3? _holderRest;
+	private readonly bool _yours;
 
 	/// <summary>
 	/// <paramref name="rest"/> is where the working hand lies palm down on the felt between jobs (the
@@ -26,8 +27,9 @@ public sealed class SeatHands
 	/// at <paramref name="holderRest"/> until there are cards to hold (see <see cref="Hold"/>).
 	/// Games where nobody holds a hand of cards (War) leave out the holding hand.
 	/// </summary>
-	public SeatHands(Node3D world, CardSounds sounds, Transform3D seat, Color tint, Vector3? rest = null, bool holds = true, Vector3? holderRest = null)
+	public SeatHands(Node3D world, CardSounds sounds, Transform3D seat, Color tint, Vector3? rest = null, bool holds = true, Vector3? holderRest = null, bool yours = false)
 	{
+		_yours = yours;
 		_world = world;
 		_sounds = sounds;
 		_seat = seat;
@@ -54,14 +56,19 @@ public sealed class SeatHands
 	/// <summary>
 	/// Behind the lower left of the fan, palm towards the player, fingers reaching up and right
 	/// behind the cards (their tips just touching the backs), the thumb across the front at the base.
-	/// It's set square to the table rather than to the fan (which lies back so you see its backs), so
-	/// the wrist drops back towards the player instead of out towards you.
+	/// For the other players it's set square to the table rather than to the fan (which lies back so
+	/// you see its backs), the fingers leaning out towards you as far as the player faces you, so the
+	/// wrist drops back towards the player instead of out towards you. Your own stays behind your cards.
 	/// </summary>
 	public Transform3D HoldingPose
 	{
 		get
 		{
-			var fingers = (Vector3.Up * 0.6f + Away + PlayersRight * 0.35f).Normalized();
+			if (_yours)
+				return _seat * new Transform3D(new Basis(Vector3.Back, -0.45f) * new Basis(Vector3.Right, -0.2f), new Vector3(-0.3f, 0.05f, -0.2f));
+			// The camera looks down the table from your side (+z).
+			float facingYou = Mathf.Max(0, Away.Dot(Vector3.Back));
+			var fingers = (Vector3.Up * 0.6f + Away * facingYou + PlayersRight * 0.35f).Normalized();
 			var towards = -Away;
 			var palm = (towards - fingers * towards.Dot(fingers)).Normalized();
 			return new Transform3D(new Basis(fingers.Cross(palm), fingers, palm), _seat * new Vector3(-0.25f, 0.14f, 0.12f));
