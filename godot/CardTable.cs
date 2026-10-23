@@ -116,15 +116,20 @@ public partial class CardTable : Node3D
 			((ShaderMaterial)mat.MaterialOverride).SetShaderParameter("felt", _cloth);
 	}
 
-	/// <summary>Where the other players sit (x, z on the felt), for each table size, left to right.</summary>
-	private static readonly Vector2[][] Around =
+	/// <summary>
+	/// Where the other players sit (x, z on the felt) and which way they face, for each table size,
+	/// left to right. Every seat faces straight across the table, so the layout is symmetrical and
+	/// the place settings sit square: players at the far side face you, players at the sides face
+	/// each other.
+	/// </summary>
+	private static readonly (Vector2 At, Vector2 Facing)[][] Around =
 	{
-		new Vector2[0],
-		new Vector2[0],
-		new[] { new Vector2(0, -2.5f) },
-		new[] { new Vector2(-1.2f, -2.4f), new Vector2(1.2f, -2.4f) },
-		new[] { new Vector2(-1.85f, -0.95f), new Vector2(0, -2.5f), new Vector2(1.85f, -0.95f) },
-		new[] { new Vector2(-1.85f, -0.7f), new Vector2(-1.0f, -2.45f), new Vector2(1.0f, -2.45f), new Vector2(1.85f, -0.7f) },
+		new (Vector2, Vector2)[0],
+		new (Vector2, Vector2)[0],
+		new[] { (new Vector2(0, -2.55f), Vector2.Down) },
+		new[] { (new Vector2(-1.25f, -2.45f), Vector2.Down), (new Vector2(1.25f, -2.45f), Vector2.Down) },
+		new[] { (new Vector2(-1.95f, -0.35f), Vector2.Right), (new Vector2(0, -2.55f), Vector2.Down), (new Vector2(1.95f, -0.35f), Vector2.Left) },
+		new[] { (new Vector2(-1.95f, -0.3f), Vector2.Right), (new Vector2(-1.05f, -2.5f), Vector2.Down), (new Vector2(1.05f, -2.5f), Vector2.Down), (new Vector2(1.95f, -0.3f), Vector2.Left) },
 	};
 
 	/// <summary>Seats a number of players (2 to 5) and works out every seat's places.</summary>
@@ -132,7 +137,6 @@ public partial class CardTable : Node3D
 	{
 		Seats = Mathf.Clamp(seats, 2, MaxSeats);
 		var eye = Camera.GlobalPosition;
-		var centre = new Vector2(Centre.X, Centre.Z);
 
 		// You: your fan held up close, tilted to face you, low on the screen.
 		var near = new Vector3(0, 2.15f, 3.46f);
@@ -147,44 +151,42 @@ public partial class CardTable : Node3D
 		foreach (var mat in _mats)
 			mat.QueueFree();
 		_mats.Clear();
-		AddMat(new Vector3(0.15f, FeltY, 1.15f), 0, new Vector2(3.6f, 1.25f));
+		AddMat(new Vector3(0, FeltY, 1.15f), 0, new Vector2(3.6f, 1.25f), TableTalk.SeatColour(0));
 
 		for (int s = 1; s < Seats; s++)
 		{
-			var at = Around[Seats][s - 1];
-			bool side = Mathf.Abs(at.X) > 1.5f;
-			var fan = new Vector3(at.X, side ? 0.8f : 0.62f, at.Y);
-			// Each fan faces its player: outward from the middle, and a little away from you so
-			// you see its backs spread rather than edge-on.
-			var outward = (at - centre).Normalized();
+			var (at, facing) = Around[Seats][s - 1];
+			bool side = facing.Y == 0;
+			// Facing (towards the table) and the player's own right, on the felt.
+			var f = new Vector3(facing.X, 0, facing.Y);
+			var r = f.Cross(Vector3.Up);
+			var seat = new Vector3(at.X, FeltY, at.Y);
+
+			var fan = seat + Vector3.Up * (side ? 0.8f : 0.62f);
+			// Each fan faces its player, and leans a little away from you so you see its backs spread rather than edge-on.
 			var away = (fan - eye).Normalized();
-			var forward = (new Vector3(outward.X, 0, outward.Y) * 0.55f + away * 0.45f).Normalized();
+			var forward = (-f * 0.55f + away * 0.45f).Normalized();
 			FanPivot[s] = new Transform3D(Basis.LookingAt(-forward, Vector3.Up), fan);
 
-			var inward = centre + (at - centre) * 0.62f;
-			var right = new Vector2(-outward.Y, outward.X); // the player's right, seen from the middle
-			Pile[s] = new Vector3(inward.X, FeltY, inward.Y);
-			var win = inward + right * 0.8f;
-			Winnings[s] = new Vector3(win.X, FeltY, win.Y);
-			var land = centre + (at - centre) * 0.4f - right * 0.45f;
-			Landing[s] = new Vector3(land.X, FeltY, land.Y);
+			// The place setting in front of them, square to the table, with everything on it.
+			var mat = seat + f * 0.75f;
+			Pile[s] = mat;
+			Winnings[s] = mat - r * 0.45f + f * 0.1f;
+			Landing[s] = mat + f * 0.55f + r * 0.2f;
+			HandRest[s] = mat + r * 0.72f - f * 0.12f;
+			HolderRest[s] = mat - r * 0.72f - f * 0.12f;
 			Bubble[s] = new Vector3(fan.X * 0.55f, fan.Y + 0.95f, fan.Z + 0.2f);
-			var rest = inward + right * 0.75f + outward * 0.55f;
-			HandRest[s] = new Vector3(rest.X, FeltY, rest.Y);
-			var left = inward - right * 0.75f + outward * 0.55f;
-			HolderRest[s] = new Vector3(left.X, FeltY, left.Y);
-
-			// The place setting: under the pile, the winnings and the resting hand, facing the player.
-			var mid = inward + right * 0.35f + outward * 0.2f;
-			AddMat(new Vector3(mid.X, FeltY, mid.Y), Mathf.Atan2(outward.X, outward.Y), new Vector2(side ? 1.7f : 2.0f, 1.25f));
+			var size = side ? new Vector2(1.8f, 1.15f) : Seats == 5 ? new Vector2(1.75f, 1.1f) : new Vector2(2.0f, 1.15f);
+			AddMat(mat, Mathf.Atan2(f.X, f.Z), size, TableTalk.SeatColour(s));
 		}
 	}
 
 	/// <summary>A place setting: a slightly deeper panel of the cloth with a stitched edge, turned to face its player.</summary>
-	private void AddMat(Vector3 at, float yaw, Vector2 size)
+	private void AddMat(Vector3 at, float yaw, Vector2 size, Color colour)
 	{
 		var material = new ShaderMaterial { Shader = _matShader ??= new Shader { Code = MatCode } };
 		material.SetShaderParameter("felt", _cloth);
+		material.SetShaderParameter("tint", colour);
 		material.SetShaderParameter("size", size);
 		var mat = new MeshInstance3D
 		{
@@ -229,6 +231,7 @@ shader_type spatial;
 render_mode specular_disabled;
 uniform vec3 felt : source_color = vec3(0.10, 0.34, 0.22);
 uniform vec2 size = vec2(2.0, 1.2);
+uniform vec3 tint : source_color = vec3(0.9, 0.75, 0.3);
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void fragment() {
 	// Distance inside a rounded rectangle, in table units.
@@ -237,7 +240,8 @@ void fragment() {
 	float outside = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.16;
 	if (outside > 0.0) discard;
 	float fibre = hash(floor(UV * size * 160.0));
-	vec3 colour = felt * (0.8 + 0.08 * fibre);
+	// The mat is its player's colour (their name's colour in the log), soft like the felt.
+	vec3 colour = mix(felt * 0.8, tint * 0.62, 0.62) * (0.9 + 0.1 * fibre);
 	// A dashed stitch a little inside the edge.
 	float line = 1.0 - smoothstep(0.006, 0.014, abs(outside + 0.07));
 	float along = abs(q.x) > abs(q.y) ? p.y : p.x;

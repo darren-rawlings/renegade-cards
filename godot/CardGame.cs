@@ -8,6 +8,7 @@ using Renegade.Audio;
 using Renegade.Core;
 using Renegade.Dev;
 using Renegade.Play;
+using Renegade.Store;
 using Renegade.Ui;
 
 namespace Renegade.Cards;
@@ -259,6 +260,31 @@ public abstract partial class CardGame : Node3D
 		Settings.Save();
 	}
 
+
+	/// <summary>
+	/// A HUD button that costs a rewarded ad, labelled "Undo (ad)" and so on: pressing it plays the
+	/// ad, and <paramref name="rewarded"/> runs once it's been watched. With ads removed in the shop,
+	/// the "(ad)" leaves the label and the button just works.
+	/// </summary>
+	protected Button AddAdButton(string text, Control.LayoutPreset preset, float left, float right, float top, float bottom, Action rewarded)
+	{
+		string label = $"{text} (ad)";
+		var button = Hud.AddButton(ShopRows.AdText(label), false, preset, left, right, top, bottom, 22);
+		void Relabel() => button.Text = ShopRows.AdText(label);
+		if (Shop.Current is { } shop)
+		{
+			shop.Changed += Relabel;
+			button.TreeExiting += () => shop.Changed -= Relabel;
+		}
+		button.Pressed += () =>
+		{
+			if (Busy)
+				return;
+			DevLog.Write($"ad: rewarded for {text}");
+			Ads.ShowRewarded(rewarded: rewarded, closed: () => { });
+		};
+		return button;
+	}
 	// ------------------------------------------------------------------ Talk at the table
 
 	/// <summary>Deep blue: the hands of whoever is speaking.</summary>
@@ -274,9 +300,9 @@ public abstract partial class CardGame : Node3D
 	protected virtual string NameOf(int seat) => seat == 0 ? "You" : Names[seat];
 
 	/// <summary>
-	/// Something a player says, into the dialogue log under their name in their colour. Their hands
-	/// turn deep blue while they speak; give <paramref name="to"/> and that player's turn deep
-	/// yellow (who's asking whom, at a glance). Null text does nothing (kept for older calls).
+	/// Something a player says, into the dialogue log under their name in their colour. Give
+	/// <paramref name="to"/> and that player's hands turn deep yellow for a moment, while the hands of
+	/// whoever's turn it is stay deep blue (see <see cref="ShowTurn"/>): who's asking whom, at a glance. Null text does nothing (kept for older calls).
 	/// </summary>
 	protected void Say(int seat, string? text, int? to = null)
 	{
@@ -284,15 +310,39 @@ public abstract partial class CardGame : Node3D
 			return;
 		_talk.Add(NameOf(seat), TableTalk.SeatColour(seat), text, Round);
 		DevLog.Write($"say: {NameOf(seat)}{(to is { } t ? " to " + NameOf(t) : "")}: {text}");
-		for (int s = 0; s < CardTable.MaxSeats; s++)
-			if (Hands[s] != null)
-				Hands[s].Tint = s == seat ? SpeakingTint : s == to ? AskedTint : GlassTint;
+		if (to is not { } asked)
+			return;
+		// Whoever is being spoken to turns yellow for a few seconds (whoever's turn it is stays blue).
+		_asked = asked;
+		Tints();
 		int token = ++_talkToken;
-		GetTree().CreateTimer(to != null ? 3.5f : 2f).Timeout += () =>
+		GetTree().CreateTimer(3.5f).Timeout += () =>
 		{
 			if (token == _talkToken)
-				SayNone();
+			{
+				_asked = -1;
+				Tints();
+			}
 		};
+	}
+
+	private int _turn = -1, _asked = -1;
+
+	/// <summary>
+	/// Whose turn it is: their hands glow deep blue from now until the turn passes, so everyone can
+	/// see who is about to play (-1 for nobody).
+	/// </summary>
+	protected void ShowTurn(int seat)
+	{
+		_turn = seat;
+		Tints();
+	}
+
+	private void Tints()
+	{
+		for (int s = 0; s < CardTable.MaxSeats; s++)
+			if (Hands[s] != null)
+				Hands[s].Tint = s == _asked ? AskedTint : s == _turn ? SpeakingTint : GlassTint;
 	}
 
 	/// <summary>The table's own news in the log (who took a trick, a card turned): no name, in italics.</summary>
@@ -309,13 +359,12 @@ public abstract partial class CardGame : Node3D
 	/// </summary>
 	protected void TrickNews(IReadOnlyList<Play> trick, int winner, string? extra = null) =>
 		News($"{string.Join(" · ", trick.Select(p => $"{NameOf(p.Seat)} {p.Card}"))} → {NameOf(winner)}{(extra != null ? ", " + extra : "")}");
-	/// <summary>Everyone's hands back to clear glass (the log keeps what was said).</summary>
+	/// <summary>Clears the yellow of whoever was being spoken to (the turn's blue stays; the log keeps what was said).</summary>
 	protected void SayNone()
 	{
 		_talkToken++;
-		for (int s = 0; s < CardTable.MaxSeats; s++)
-			if (Hands[s] != null)
-				Hands[s].Tint = GlassTint;
+		_asked = -1;
+		Tints();
 	}
 
 	// ------------------------------------------------------------------ Speed
@@ -347,6 +396,8 @@ public abstract partial class CardGame : Node3D
 		_fire?.Extinguish();
 		_fire = null;
 		SayNone();
+		_turn = -1;
+		Tints();
 		_talk?.Prune(Round);
 		for (int s = 0; s < CardTable.MaxSeats; s++)
 		{

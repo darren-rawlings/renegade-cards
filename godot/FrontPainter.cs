@@ -229,28 +229,42 @@ internal static class FrontPainter
 
 	// ------------------------------------------------------------------ Face cards
 
-	/// <summary>Jacks, queens and kings: a framed panel with the design's emblem and the suit.</summary>
 	/// <summary>
-	/// A joker: "JOKER" spelled down both corners, and in the middle a jester's star in a gold ring
-	/// with BIG or LITTLE across the foot. The big joker is red, the little one black.
+	/// A joker. In each corner, where a fan of cards shows it: a big B (the big joker, red) or L
+	/// (the little joker, black) as its index, a star beneath, and "JOKER" spelled down below that.
+	/// In the middle, a jester's star in a gold ring with BIG or LITTLE across the foot.
 	/// </summary>
 	private static void Joker(Control c, Vector2 origin, bool big, Palette palette, Color ink)
 	{
 		var font = ThemeDB.FallbackFont;
+		Vector2[] Star(Vector2 at, float outer, float inner)
+		{
+			var points = new Vector2[10];
+			for (int i = 0; i < 10; i++)
+			{
+				float a = -Mathf.Pi / 2 + i * Mathf.Pi / 5;
+				points[i] = at + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (i % 2 == 0 ? outer : inner);
+			}
+			return points;
+		}
 		void Corner(Vector2 at, bool flipped)
 		{
 			c.DrawSetTransform(at, flipped ? Mathf.Pi : 0, Vector2.One);
+			string index = big ? "B" : "L";
+			var indexSize = font.GetStringSize(index, HorizontalAlignment.Left, -1, 46);
+			c.DrawString(font, new Vector2(-indexSize.X / 2, 0), index, HorizontalAlignment.Left, -1, 46, ink);
+			c.DrawColoredPolygon(Star(new Vector2(0, 24), 14, 6), ink);
 			const string word = "JOKER";
 			for (int i = 0; i < word.Length; i++)
 			{
 				string letter = word[i].ToString();
-				var size = font.GetStringSize(letter, HorizontalAlignment.Left, -1, 26);
-				c.DrawString(font, new Vector2(-size.X / 2, i * 25), letter, HorizontalAlignment.Left, -1, 26, ink);
+				var size = font.GetStringSize(letter, HorizontalAlignment.Left, -1, 17);
+				c.DrawString(font, new Vector2(-size.X / 2, 58 + i * 17), letter, HorizontalAlignment.Left, -1, 17, ink);
 			}
 			c.DrawSetTransform(Vector2.Zero, 0, Vector2.One);
 		}
-		Corner(origin + new Vector2(30, 46), false);
-		Corner(origin + new Vector2(CardArt.CellWidth - 30, CardArt.CellHeight - 46), true);
+		Corner(origin + new Vector2(34, 58), false);
+		Corner(origin + new Vector2(CardArt.CellWidth - 34, CardArt.CellHeight - 58), true);
 
 		var centre = origin + new Vector2(CardArt.CellWidth / 2f, CardArt.CellHeight / 2f - 12);
 		c.DrawCircle(centre, 66, palette.Panel);
@@ -273,6 +287,7 @@ internal static class FrontPainter
 		c.DrawString(font, new Vector2(centre.X - labelSize.X / 2, centre.Y + 112), label, HorizontalAlignment.Left, -1, 28, ink);
 	}
 
+	/// <summary>Jacks, queens and kings: a framed panel with the design's emblem and the suit.</summary>
 	private static void FacePanel(Control c, Vector2 origin, Card card, CardFront front, Palette palette, Color ink)
 	{
 		var panel = new Rect2(origin + new Vector2(62, 52), new Vector2(CardArt.CellWidth - 124, CardArt.CellHeight - 104));
