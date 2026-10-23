@@ -100,10 +100,11 @@ public abstract partial class CardGame : Node3D
 	protected virtual void AddSettings() { }
 
 	/// <summary>
-	/// Where the other players sit, for a game that needs room on the table for something of its own
-	/// (see <see cref="CardTable.Layout"/>); null for the usual seating.
+	/// For a game that needs room on the table for something of its own: called once the table and
+	/// its camera are up, before anyone's hands are made, to set <see cref="CardTable.Layout"/> and
+	/// <see cref="CardTable.YourPlace"/> and call <see cref="CardTable.Arrange"/> again.
 	/// </summary>
-	protected virtual (Vector2 At, Vector2 Facing)[]? SeatLayout(int players) => null;
+	protected virtual void LayOut(CardTable table) { }
 
 	/// <summary>A game's own developer flag (after the shared ones).</summary>
 	protected virtual void DevArg(string name, string value) { }
@@ -152,8 +153,10 @@ public abstract partial class CardGame : Node3D
 
 	private async Task Start()
 	{
-		Table = new CardTable { Seats = Solitaire ? 1 : Players, Solitaire = Solitaire, SolitaireWidth = LayoutWidth, Layout = SeatLayout(Players) };
+		Table = new CardTable { Seats = Solitaire ? 1 : Players, Solitaire = Solitaire, SolitaireWidth = LayoutWidth };
 		AddChild(Table);
+		if (!Solitaire)
+			LayOut(Table);
 		var pool = new SoundPool();
 		AddChild(pool);
 		Sounds = new CardSounds(pool);

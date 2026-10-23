@@ -21,6 +21,18 @@ public partial class CardTable : Node3D
 	public const float FeltY = 0.002f;
 	public const int MaxSeats = 5;
 
+	/// <summary>The edges of the felt (not solitaire): half its width, and its far and near ends.</summary>
+	public const float FeltHalfWidth = 3.0f, FeltFar = -4.3f, FeltNear = 3.1f;
+
+	/// <summary>Half the depth of your place setting (it's 1.25 deep).</summary>
+	public const float YourHalfDepth = 0.625f;
+
+	/// <summary>
+	/// Where another player sits (x, z on the felt), which way they face, and how far in front of
+	/// them their place setting lies (its centre).
+	/// </summary>
+	public readonly record struct Place(Vector2 At, Vector2 Facing, float Reach = 0.75f);
+
 	private static Shader? _felt;
 	private static Shader? _matShader;
 	private ShaderMaterial _feltMaterial = null!;
@@ -95,8 +107,8 @@ public partial class CardTable : Node3D
 		_feltMaterial.SetShaderParameter("felt", _cloth);
 		var felt = new MeshInstance3D
 		{
-			Mesh = new PlaneMesh { Size = Solitaire ? new Vector2(SolitaireWidth + 1.2f, (SolitaireWidth + 1.2f) * 2.1f) : new Vector2(6.0f, 7.4f) },
-			Position = Solitaire ? new Vector3(0, 0.001f, 0.6f) : new Vector3(0, 0.001f, -0.6f),
+			Mesh = new PlaneMesh { Size = Solitaire ? new Vector2(SolitaireWidth + 1.2f, (SolitaireWidth + 1.2f) * 2.1f) : new Vector2(FeltHalfWidth * 2, FeltNear - FeltFar) },
+			Position = Solitaire ? new Vector3(0, 0.001f, 0.6f) : new Vector3(0, 0.001f, (FeltNear + FeltFar) / 2),
 			MaterialOverride = _feltMaterial,
 			CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
 		};
@@ -136,7 +148,10 @@ public partial class CardTable : Node3D
 	/// A game's own seating for the other players (same form as the usual one, one entry per seat
 	/// after yours), for when something of its own takes up part of the table. Null for the usual.
 	/// </summary>
-	public (Vector2 At, Vector2 Facing)[]? Layout { get; set; }
+	public Place[]? Layout { get; set; }
+
+	/// <summary>How far down the table (z) your place setting's centre lies, and your hands and piles with it.</summary>
+	public float YourPlace { get; set; } = 1.15f;
 
 	/// <summary>Seats a number of players (2 to 5) and works out every seat's places.</summary>
 	public void Arrange(int seats)
@@ -147,21 +162,22 @@ public partial class CardTable : Node3D
 		// You: your fan held up close, tilted to face you, low on the screen.
 		var near = new Vector3(0, 2.15f, 3.46f);
 		FanPivot[0] = new Transform3D(Basis.LookingAt(near - eye, Vector3.Up), near);
-		Pile[0] = new Vector3(0, FeltY, 1.25f);
-		Winnings[0] = new Vector3(1.45f, FeltY, 0.5f);
-		Landing[0] = new Vector3(-1.2f, FeltY, 0.45f);
+		float z = YourPlace;
+		Pile[0] = new Vector3(0, FeltY, z + 0.1f);
+		Winnings[0] = new Vector3(1.45f, FeltY, z - 0.65f);
+		Landing[0] = new Vector3(-1.2f, FeltY, z - 0.7f);
 		Bubble[0] = new Vector3(0, 1.2f, 1.3f);
-		HandRest[0] = new Vector3(1.75f, FeltY, 1.45f);
-		HolderRest[0] = new Vector3(-1.75f, FeltY, 1.45f);
+		HandRest[0] = new Vector3(1.75f, FeltY, z + 0.3f);
+		HolderRest[0] = new Vector3(-1.75f, FeltY, z + 0.3f);
 
 		foreach (var mat in _mats)
 			mat.QueueFree();
 		_mats.Clear();
-		AddMat(new Vector3(0, FeltY, 1.15f), 0, new Vector2(3.6f, 1.25f), TableTalk.SeatColour(0));
+		AddMat(new Vector3(0, FeltY, z), 0, new Vector2(3.6f, YourHalfDepth * 2), TableTalk.SeatColour(0));
 
 		for (int s = 1; s < Seats; s++)
 		{
-			var (at, facing) = Layout is { } layout && layout.Length == Seats - 1 ? layout[s - 1] : Around[Seats][s - 1];
+			var (at, facing, reach) = Layout is { } layout && layout.Length == Seats - 1 ? layout[s - 1] : new Place(Around[Seats][s - 1].At, Around[Seats][s - 1].Facing);
 			bool side = facing.Y == 0;
 			// Facing (towards the table) and the player's own right, on the felt.
 			var f = new Vector3(facing.X, 0, facing.Y);
@@ -175,7 +191,7 @@ public partial class CardTable : Node3D
 			FanPivot[s] = new Transform3D(Basis.LookingAt(-forward, Vector3.Up), fan);
 
 			// The place setting in front of them, square to the table, with everything on it.
-			var mat = seat + f * 0.75f;
+			var mat = seat + f * reach;
 			Pile[s] = mat;
 			Winnings[s] = mat - r * 0.45f + f * 0.1f;
 			Landing[s] = mat + f * 0.55f + r * 0.2f;
