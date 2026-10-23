@@ -54,8 +54,19 @@ public sealed class SeatHands
 	/// <summary>
 	/// Behind the lower left of the fan, palm towards the player, fingers reaching up and right
 	/// behind the cards (their tips just touching the backs), the thumb across the front at the base.
+	/// It's set square to the table rather than to the fan (which lies back so you see its backs), so
+	/// the wrist drops back towards the player instead of out towards you.
 	/// </summary>
-	public Transform3D HoldingPose => _seat * new Transform3D(new Basis(Vector3.Back, -0.45f) * new Basis(Vector3.Right, -0.2f), new Vector3(-0.3f, 0.05f, -0.2f));
+	public Transform3D HoldingPose
+	{
+		get
+		{
+			var fingers = (Vector3.Up * 0.6f + Away + PlayersRight * 0.35f).Normalized();
+			var towards = -Away;
+			var palm = (towards - fingers * towards.Dot(fingers)).Normalized();
+			return new Transform3D(new Basis(fingers.Cross(palm), fingers, palm), _seat * new Vector3(-0.25f, 0.14f, 0.12f));
+		}
+	}
 
 	/// <summary>
 	/// Palm down on the felt at the seat's place, fingers towards the middle of the table (or, with
