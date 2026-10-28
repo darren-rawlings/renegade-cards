@@ -50,6 +50,9 @@ public abstract partial class CardGame : Node3D
 	private bool _handCheck;
 	private bool _begin;
 	private int _seatView = -1;
+	private string? _clip;
+	private bool _clipping;
+	private CanvasLayer? _clipCover;
 	private bool _shuffleLab, _quitAfterShuffle;
 	private ShuffleStyle? _shuffleStyle;
 
@@ -241,6 +244,8 @@ public abstract partial class CardGame : Node3D
 		Hud.AddChild(_styleMenu);
 		if (!Demo)
 			Hud.OfferTutorialOnce(Settings);
+		if (_clip != null)
+			BeginClip();
 		Hud.ApplyDevFlags();
 		if (_seatView >= 0 && _seatView < Players)
 			LookAtSeat(_seatView);
@@ -250,6 +255,51 @@ public abstract partial class CardGame : Node3D
 			await NewRound();
 		else
 			OfferBegin();
+	}
+
+	// ------------------------------------------------------------------ Tutorial clips
+
+	/// <summary>How fast the game plays while a clip waits for its moment.</summary>
+	private const float ClipFastForward = 12f;
+
+	/// <summary>The colour the screen is covered in until the moment (the recorder cuts those frames away).</summary>
+	public static readonly Color ClipCoverColour = new(1, 0, 1);
+
+	/// <summary>
+	/// `--clip=name` (tools/Record-Clips.ps1 records it): the computer plays every seat at high speed
+	/// under a magenta cover, with the HUD hidden, until the game reaches the clip's moment
+	/// (<see cref="ClipMoment"/>); then it plays at normal speed for the clip's length and quits.
+	/// </summary>
+	private void BeginClip()
+	{
+		Hud.Visible = false;
+		_clipCover = new CanvasLayer { Layer = 100 };
+		var cover = new ColorRect { Color = ClipCoverColour, MouseFilter = Control.MouseFilterEnum.Ignore };
+		cover.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+		_clipCover.AddChild(cover);
+		AddChild(_clipCover);
+		_clipping = true;
+		ApplySpeed();
+		// A clip that never reaches its moment stops in the end.
+		GetTree().CreateTimer(240, processAlways: true, ignoreTimeScale: true).Timeout += () => GetTree().Quit();
+	}
+
+	/// <summary>
+	/// The game has reached a moment a tutorial clip shows (a battle, the count, the dummy going
+	/// down). If it's the clip being recorded, the cover lifts, play goes back to normal speed, and
+	/// the game quits after <paramref name="seconds"/>.
+	/// </summary>
+	/// <summary>The clip being recorded (`--clip=name`), if any.</summary>
+	protected string? ClipName => _clip;
+
+	protected void ClipMoment(string name, float seconds = 6)
+	{
+		if (!_clipping || name != _clip)
+			return;
+		_clipping = false;
+		_clipCover?.QueueFree();
+		ApplySpeed();
+		GetTree().CreateTimer(seconds, processAlways: true, ignoreTimeScale: true).Timeout += () => GetTree().Quit();
 	}
 
 	/// <summary>`--seat-view=N`: the camera close in on a seat's fan, from your side of it, to check how its hands hold it.</summary>
@@ -469,7 +519,7 @@ public abstract partial class CardGame : Node3D
 		}
 	}
 
-	private void ApplySpeed() => Engine.TimeScale = Speed * _boost;
+	private void ApplySpeed() => Engine.TimeScale = _clipping ? ClipFastForward : Speed * _boost;
 
 	/// <summary>"You" or a computer player's name.</summary>
 	protected static string Who(int seat) => seat == 0 ? "you" : Names[seat];
@@ -849,6 +899,11 @@ public abstract partial class CardGame : Node3D
 				case "--bake-hands":
 					GD.Print($"Baked {HandShape.Bake()} hand meshes into {HandShape.Baked}");
 					GetTree().Quit();
+					break;
+				case "--clip":
+					_clip = value;
+					Demo = true;
+					Settings.Muted = true;
 					break;
 				case "--seat-view":
 					_seatView = int.Parse(value);
