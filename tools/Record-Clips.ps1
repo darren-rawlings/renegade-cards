@@ -48,11 +48,16 @@ try {
 		$run = Start-Process -FilePath $godot -ArgumentList $arguments -NoNewWindow -PassThru
 		if (-not $run.WaitForExit(900000)) { $run.Kill(); Write-Warning "$name took over 15 minutes and was stopped"; continue }
 		# Drop everything up to the last covered frame (the first few are drawn before the cover is up).
+		# A clip whose moment is the very start (the deal) never shows the cover: it keeps all but the first.
 		$all = @(Get-ChildItem $frames -Filter *.png | Sort-Object Name)
 		$start = 0
 		while ($start -lt $all.Count -and -not (Test-Cover $all[$start].FullName)) { $start++ }
-		while ($start -lt $all.Count -and (Test-Cover $all[$start].FullName)) { $start++ }
-		if ($start -ge $all.Count) { Write-Warning "$name never reached its moment"; continue }
+		if ($start -ge $all.Count) {
+			$start = 1
+		} else {
+			while ($start -lt $all.Count -and (Test-Cover $all[$start].FullName)) { $start++ }
+			if ($start -ge $all.Count) { Write-Warning "$name never reached its moment"; continue }
+		}
 		$i = 0
 		foreach ($file in $all[$start..($all.Count - 1)]) {
 			Move-Item $file.FullName (Join-Path $keep ('k{0:D6}.png' -f $i))

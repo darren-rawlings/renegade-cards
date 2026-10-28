@@ -284,19 +284,21 @@ public abstract partial class CardGame : Node3D
 		GetTree().CreateTimer(240, processAlways: true, ignoreTimeScale: true).Timeout += () => GetTree().Quit();
 	}
 
-	/// <summary>
-	/// The game has reached a moment a tutorial clip shows (a battle, the count, the dummy going
-	/// down). If it's the clip being recorded, the cover lifts, play goes back to normal speed, and
-	/// the game quits after <paramref name="seconds"/>.
-	/// </summary>
 	/// <summary>The clip being recorded (`--clip=name`), if any.</summary>
 	protected string? ClipName => _clip;
 
-	protected void ClipMoment(string name, float seconds = 6)
+	/// <summary>
+	/// The game has reached a moment a tutorial clip shows (a battle, the count, the dummy going
+	/// down). If it's the clip being recorded, the cover lifts, play goes back to normal speed, and
+	/// the game quits after <paramref name="seconds"/>. With <paramref name="log"/> the HUD shows
+	/// too, for a moment told in the log at the top (the bidding): record it with a higher crop.
+	/// </summary>
+	protected void ClipMoment(string name, float seconds = 6, bool log = false)
 	{
 		if (!_clipping || name != _clip)
 			return;
 		_clipping = false;
+		Hud.Visible = log;
 		_clipCover?.QueueFree();
 		ApplySpeed();
 		GetTree().CreateTimer(seconds, processAlways: true, ignoreTimeScale: true).Timeout += () => GetTree().Quit();
