@@ -212,10 +212,11 @@ public partial class CardTable : Node3D
 	/// across the table are held low enough to stay clear of the log at the top
 	/// (<see cref="FarFansBelow"/>). Three players sit left and right (or, with
 	/// <paramref name="acrossAtThree"/>, left and across, when the right is taken);
-	/// <paramref name="rightAt"/> moves the right-hand setting in (its x).
+	/// <paramref name="rightAt"/> moves the right-hand setting in (its x); <paramref name="stripUp"/> moves
+	/// the strip (and the far settings with it) up the table.
 	/// Your cards in play go just above the top of your fan (<see cref="YourPlayZ"/>).
 	/// </summary>
-	public void SetByEye(int seats, float statusTop, float? rightAt = null, bool acrossAtThree = false)
+	public void SetByEye(int seats, float statusTop, float? rightAt = null, bool acrossAtThree = false, float stripUp = 0)
 	{
 		const float acrossHalf = 0.575f, fiveHalf = 0.55f, sideHalf = 0.875f, sideDepth = 1.0f, inboard = 0.45f;
 		YourMatSize = new Vector2(2.0f, 1.15f);
@@ -223,7 +224,7 @@ public partial class CardTable : Node3D
 		FarFansBelow = TableTalk.Bottom + 8;
 		YourPlace = FeltAt(statusTop - 6) - YourHalfDepth;
 		float yoursTop = ScreenY(YourPlace - YourHalfDepth);
-		float line = ScreenY(StripFar(), StripHeight);
+		float line = ScreenY(StripFar() - stripUp, StripHeight);
 		float far = FeltAt(line);
 		float level = Solve(z => (ScreenY(z - sideHalf) - line) - (yoursTop - ScreenY(z + sideHalf)), 0);
 		float leftMat = -FeltHalfWidth + SideMargin + sideDepth / 2;

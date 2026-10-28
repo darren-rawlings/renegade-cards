@@ -22,6 +22,9 @@ public sealed record HandPose(string Name, float[][] Curl, float ThumbAcross, fl
 	/// <summary>Holding a fan of cards: fingers behind the cards, the thumb pressed across the front.</summary>
 	public static readonly HandPose Hold = new("hold", new[] { C(10, 14, 9), C(10, 14, 9), C(11, 15, 9), C(13, 17, 10) }, 0.75f, 24f, new[] { -6f, 0f, 4f, 9f });
 
+	/// <summary>Holding a fan seen from across the table: as <see cref="Hold"/>, but the thumb along the side rather than across the front (where it would pass through the cards).</summary>
+	public static readonly HandPose Grip = new("grip", new[] { C(10, 14, 9), C(10, 14, 9), C(11, 15, 9), C(13, 17, 10) }, 0.12f, 10f, new[] { -6f, 0f, 4f, 9f });
+
 	/// <summary>Picking up a card: thumb and index finger together, the other fingers tucked out of the way.</summary>
 	public static readonly HandPose Pinch = new("pinch", new[] { C(40, 44, 18), C(46, 62, 38), C(50, 66, 40), C(54, 70, 42) }, 0.6f, 12f, new[] { -3f, 1f, 6f, 11f }, ThumbToIndex: true);
 }
@@ -55,12 +58,26 @@ public static class HandShape
 	/// <summary>The mesh for a pose. Built once, then cached.</summary>
 	public static ArrayMesh Mesh(HandPose pose, bool right) => Mesh(pose, pose, 0, right);
 
-	/// <summary>The mesh part of the way from one pose to another (t from 0 to 1), for animating between them.</summary>
+	/// <summary>
+	/// The mesh part of the way from one pose to another (t from 0 to 1), for animating between them.
+	/// Building one takes about a second, so the ones the games use are baked into the kit
+	/// (<see cref="Baked"/>, made with <see cref="Bake"/>) and only loaded; any other is built.
+	/// </summary>
 	public static ArrayMesh Mesh(HandPose from, HandPose to, float t, bool right)
 	{
-		var key = (from.Name, to.Name, (int)Mathf.Round(t * 100), right);
+		int step = (int)Mathf.Round(t * 100);
+		if (step <= 0)
+			to = from;
+		else if (step >= 100)
+			from = to;
+		if (step <= 0 || step >= 100)
+			step = 0;
+		var key = (from.Name, to.Name, step, right);
 		if (Cache.TryGetValue(key, out var mesh))
 			return mesh;
+		string path = $"{Baked}/{from.Name}-{to.Name}-{step}-{(right ? "R" : "L")}.res";
+		if (ResourceLoader.Exists(path) && ResourceLoader.Load<ArrayMesh>(path) is { } baked)
+			return Cache[key] = baked;
 		var a = Digits(from);
 		var b = Digits(to);
 		var blend = new List<Bone[]>();
@@ -68,10 +85,48 @@ public static class HandShape
 		{
 			var bones = new Bone[a[d].Length];
 			for (int s = 0; s < bones.Length; s++)
-				bones[s] = Bone.Lerp(a[d][s], b[d][s], t);
+				bones[s] = Bone.Lerp(a[d][s], b[d][s], step / 100f);
 			blend.Add(bones);
 		}
 		return Cache[key] = Build(new Field(blend), mirror: !right);
+	}
+
+	/// <summary>Where the baked hand meshes live, in the kit.</summary>
+	public const string Baked = "res://addons/renegade_cards/hands";
+
+	/// <summary>The poses (and in-betweens) the games use, for <see cref="Bake"/>.</summary>
+	private static IEnumerable<(HandPose From, HandPose To, float T)> Used()
+	{
+		foreach (var pose in new[] { HandPose.Relaxed, HandPose.Rest, HandPose.Hold, HandPose.Grip, HandPose.Pinch })
+			yield return (pose, pose, 0);
+		foreach (float t in new[] { 0.35f, 0.7f })
+			yield return (HandPose.Relaxed, HandPose.Pinch, t);
+	}
+
+	/// <summary>Builds every hand mesh the games use and saves it into the kit (`--bake-hands`). Returns how many.</summary>
+	public static int Bake()
+	{
+		DirAccess.MakeDirRecursiveAbsolute(ProjectSettings.GlobalizePath(Baked));
+		int count = 0;
+		foreach (var (from, to, t) in Used())
+			foreach (bool right in new[] { false, true })
+			{
+				int step = (int)Mathf.Round(t * 100);
+				string path = $"{Baked}/{from.Name}-{to.Name}-{step}-{(right ? "R" : "L")}.res";
+				var a = Digits(from);
+				var b = Digits(to);
+				var blend = new List<Bone[]>();
+				for (int d = 0; d < a.Count; d++)
+				{
+					var bones = new Bone[a[d].Length];
+					for (int s = 0; s < bones.Length; s++)
+						bones[s] = Bone.Lerp(a[d][s], b[d][s], t);
+					blend.Add(bones);
+				}
+				ResourceSaver.Save(Build(new Field(blend), mirror: !right), path, ResourceSaver.SaverFlags.Compress);
+				count++;
+			}
+		return count;
 	}
 
 	/// <summary>Where a pinched card sits, between the thumb and index fingertips, in the hand's frame (table units).</summary>

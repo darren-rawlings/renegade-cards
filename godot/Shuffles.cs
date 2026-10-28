@@ -70,7 +70,7 @@ public sealed class Shuffles
 
 	public async Task Play(ShuffleStyle style, List<Card3D> deck, Vector3 at)
 	{
-		Left.Visible = Right.Visible = style != ShuffleStyle.Pile || !HideWhenResting;
+		Show(shuffling: style != ShuffleStyle.Pile); // the pile shuffle needs no borrowed hands
 		switch (style)
 		{
 			case ShuffleStyle.RiffleBridge: await _dealer.Riffle(deck, at, times: 1, Left, Right); break;
@@ -81,7 +81,7 @@ public sealed class Shuffles
 			case ShuffleStyle.Pile: await Pile(deck, at); break;
 			default: await Faro(deck, at); break;
 		}
-		Left.Visible = Right.Visible = !HideWhenResting;
+		Show(shuffling: false);
 	}
 
 	// ------------------------------------------------------------------ Helpers
@@ -127,6 +127,16 @@ public sealed class Shuffles
 	/// <summary>Hands that only appear for the shuffle (solitaire games have none of their own).</summary>
 	public bool HideWhenResting { get; set; }
 
+	/// <summary>A left hand borrowed just for the shuffle (the seat has a right hand but no left).</summary>
+	public bool LeftOnlyForShuffle { get; set; }
+
+	/// <summary>The hands appear while they shuffle; at rest, borrowed ones go away.</summary>
+	private void Show(bool shuffling)
+	{
+		Right.Visible = shuffling || !HideWhenResting;
+		Left.Visible = shuffling || !(HideWhenResting || LeftOnlyForShuffle);
+	}
+
 	private Transform3D LeftHome(Vector3 at) => LeftRest ?? Hand(at + new Vector3(-1.3f, 0.12f, 1.4f), Vector3.Down, new Vector3(0.3f, 0, -1));
 	private Transform3D RightHome(Vector3 at) => RightRest ?? Hand(at + new Vector3(1.3f, 0.12f, 1.4f), Vector3.Down, new Vector3(-0.3f, 0, -1));
 
@@ -139,7 +149,7 @@ public sealed class Shuffles
 		Right.Pose = HandPose.Rest;
 		Left.GlobalTransform = LeftHome(at);
 		Right.GlobalTransform = RightHome(at);
-		Left.Visible = Right.Visible = !HideWhenResting;
+		Show(shuffling: false);
 	}
 
 	private async Task ToRest(Vector3 at)
@@ -152,7 +162,7 @@ public sealed class Shuffles
 		await Done(b);
 		Left.Pose = HandPose.Rest;
 		Right.Pose = HandPose.Rest;
-		Left.Visible = Right.Visible = !HideWhenResting;
+		Show(shuffling: false);
 	}
 
 	private List<int> Packets(int count, int min, int max)

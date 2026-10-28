@@ -37,7 +37,7 @@ public sealed class SeatHands
 		_holderRest = holderRest;
 		if (holds)
 		{
-			Holder = new GlassHand(right: false, tint, holderRest != null ? HandPose.Rest : HandPose.Hold);
+			Holder = new GlassHand(right: false, tint, holderRest != null ? HandPose.Rest : HoldPose(yours));
 			world.AddChild(Holder);
 			Holder.GlobalTransform = holderRest != null ? HolderRestingPose : HoldingPose;
 		}
@@ -46,6 +46,9 @@ public sealed class SeatHands
 		Worker.WarmUp();
 		Worker.GlobalTransform = RestingPose;
 	}
+
+	/// <summary>How the left hand grips the fan: yours with the thumb across the front, the others' with it along the side (seen from behind their cards, a thumb across the front goes through them).</summary>
+	private static HandPose HoldPose(bool yours) => yours ? HandPose.Hold : HandPose.Grip;
 
 	/// <summary>The left hand, holding the fan (none in games where no one holds cards).</summary>
 	public GlassHand? Holder { get; }
@@ -66,12 +69,16 @@ public sealed class SeatHands
 		{
 			if (_yours)
 				return _seat * new Transform3D(new Basis(Vector3.Back, -0.45f) * new Basis(Vector3.Right, -0.2f), new Vector3(-0.3f, 0.05f, -0.2f));
+			// Behind the cards, flat against their backs: the palm faces the player as the cards do (so
+			// nothing pokes through them), the thumb curling round the bottom edge onto the faces.
 			// The camera looks down the table from your side (+z).
 			float facingYou = Mathf.Max(0, Away.Dot(Vector3.Back));
-			var fingers = (Vector3.Up * 0.6f + Away * facingYou + PlayersRight * 0.35f).Normalized();
-			var towards = -Away;
+			// Up the fan (a little towards its right), tipped away from the player so the fingertips
+			// stay off the cards and the wrist drops back under the fan towards them.
+			var fingers = (_seat.Basis.Y.Normalized() + _seat.Basis.X.Normalized() * 0.45f + Away * 0.35f).Normalized();
+			var towards = _seat.Basis.Z.Normalized();
 			var palm = (towards - fingers * towards.Dot(fingers)).Normalized();
-			return new Transform3D(new Basis(fingers.Cross(palm), fingers, palm), _seat * new Vector3(-0.25f, 0.14f, 0.12f));
+			return new Transform3D(new Basis(fingers.Cross(palm), fingers, palm), _seat * new Vector3(-0.16f, -0.1f, -0.06f));
 		}
 	}
 
@@ -117,7 +124,7 @@ public sealed class SeatHands
 		Holding = holding;
 		Holder.Pose = HandPose.Relaxed;
 		var flight = CardMotion.Fly(Holder, holding ? HoldingPose : HolderRestingPose, 0.3f, lift: 0.15f);
-		var pose = holding ? HandPose.Hold : HandPose.Rest;
+		var pose = holding ? HoldPose(_yours) : HandPose.Rest;
 		flight.TweenCallback(Callable.From(() => { Holder.Pose = pose; }));
 	}
 
@@ -263,11 +270,17 @@ public sealed class SeatHands
 			card.Reparent(_world, keepGlobalTransform: true);
 	}
 
-	/// <summary>Puts the working hand back at rest at once (a new deal).</summary>
+	/// <summary>Puts the working hand back at rest at once (a new deal), and back on the table if it had left.</summary>
 	public void Reset()
 	{
+		foreach (var tween in _show)
+			tween.Kill();
+		_show.Clear();
+		Worker.Visible = true;
 		Worker.Pose = _rest != null ? HandPose.Rest : HandPose.Relaxed;
 		Worker.GlobalTransform = RestingPose;
+		if (Holder != null)
+			Holder.Visible = true;
 		if (Holder != null && _holderRest != null)
 		{
 			Holding = false;
@@ -277,5 +290,60 @@ public sealed class SeatHands
 		foreach (var child in Worker.GetChildren())
 			if (child is Card3D card)
 				card.Reparent(_world, keepGlobalTransform: true);
+	}
+
+	private readonly List<Tween> _show = new();
+
+	/// <summary>Where the player's place is: between where their hands rest (or where they hold their fan).</summary>
+	private Vector3 Place => _rest is { } right && _holderRest is { } left ? (right + left) / 2 : _rest ?? _seat.Origin;
+
+	/// <summary>
+	/// The winner's cheer: both hands come up together over their place, clasped, and shake in
+	/// triumph (a lone hand makes a fist and punches the air).
+	/// </summary>
+	public void Cheer()
+	{
+		var at = Place with { Y = CardTable.FeltY } + Vector3.Up * 0.55f - Away * 0.15f;
+		var fingers = (Vector3.Up + Away * 0.35f).Normalized();
+		Transform3D Facing(Vector3 centre, Vector3 palm)
+		{
+			palm = (palm - fingers * palm.Dot(fingers)).Normalized();
+			return new Transform3D(new Basis(fingers.Cross(palm), fingers, palm), centre);
+		}
+		void Shake(GlassHand hand, Transform3D clasped)
+		{
+			hand.Pose = HandPose.Hold;
+			var come = CardMotion.Fly(hand, clasped, 0.4f, lift: 0.1f);
+			_show.Add(come);
+			var shake = hand.CreateTween().SetLoops(5);
+			shake.TweenProperty(hand, "global_position", clasped.Origin + Vector3.Up * 0.14f, 0.16f).SetTrans(Tween.TransitionType.Sine);
+			shake.TweenProperty(hand, "global_position", clasped.Origin, 0.16f).SetTrans(Tween.TransitionType.Sine);
+			shake.Pause();
+			come.TweenCallback(Callable.From(() => shake.Play()));
+			_show.Add(shake);
+		}
+		if (Holder == null)
+		{
+			Shake(Worker, Facing(at, -Away));
+			return;
+		}
+		// Palms together, fingers up: the right hand on the player's right.
+		Shake(Worker, Facing(at + PlayersRight * 0.06f, -PlayersRight));
+		Shake(Holder, Facing(at - PlayersRight * 0.06f, PlayersRight));
+	}
+
+	/// <summary>The hands slip back off the edge of the table and are gone (a player out of the game, or the losers at the end).</summary>
+	public void Leave()
+	{
+		foreach (var hand in new[] { Worker, Holder })
+		{
+			if (hand == null || !hand.Visible)
+				continue;
+			var tween = hand.CreateTween().SetParallel();
+			tween.TweenProperty(hand, "global_position", hand.GlobalPosition - Away * 1.1f + Vector3.Down * 0.6f, 0.7f)
+				.SetTrans(Tween.TransitionType.Quad).SetEase(Tween.EaseType.In);
+			tween.Chain().TweenCallback(Callable.From(() => hand.Visible = false));
+			_show.Add(tween);
+		}
 	}
 }

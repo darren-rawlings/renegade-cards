@@ -48,6 +48,8 @@ public abstract partial class CardGame : Node3D
 	private Flames? _fire;
 	private string? _art;
 	private bool _handCheck;
+	private bool _begin;
+	private int _seatView = -1;
 	private bool _shuffleLab, _quitAfterShuffle;
 	private ShuffleStyle? _shuffleStyle;
 
@@ -193,8 +195,13 @@ public abstract partial class CardGame : Node3D
 		Hud.ProcessMode = ProcessModeEnum.Always;
 		Hud.TutorialOpened += () => GetTree().Paused = true;
 		Hud.TutorialClosed += () => GetTree().Paused = false;
-		_talk = new TableTalk { KeepRounds = TalkRounds };
-		Hud.AddChild(_talk);
+		// The log of what's said at the table (not in solitaire: there's no one to talk to, and it would
+		// be in the way of the cards).
+		if (!Solitaire)
+		{
+			_talk = new TableTalk { KeepRounds = TalkRounds };
+			Hud.AddChild(_talk);
+		}
 		Hud.NewGamePressed += OnNewGamePressed;
 		Hud.RestartPressed += OnRestartPressed;
 		Hud.SetTutorial(TutorialPages);
@@ -235,7 +242,37 @@ public abstract partial class CardGame : Node3D
 		if (!Demo)
 			Hud.OfferTutorialOnce(Settings);
 		Hud.ApplyDevFlags();
-		await NewRound();
+		if (_seatView >= 0 && _seatView < Players)
+			LookAtSeat(_seatView);
+		// Nothing is dealt until you say: you can change the settings (the number of players, say) first
+		// without it costing a game. The demo just starts.
+		if (Demo || _begin)
+			await NewRound();
+		else
+			OfferBegin();
+	}
+
+	/// <summary>`--seat-view=N`: the camera close in on a seat's fan, from your side of it, to check how its hands hold it.</summary>
+	private void LookAtSeat(int seat)
+	{
+		var fan = Table.FanPivot[seat];
+		var target = fan * new Vector3(0, 0.35f, 0);
+		var from = target + (Table.Camera.GlobalPosition - target).Normalized() * 2.6f;
+		Table.Camera.GlobalPosition = from;
+		Table.Camera.LookAt(target, Vector3.Up);
+	}
+
+	/// <summary>The Begin game button, in the middle of the empty table, until it's pressed.</summary>
+	private void OfferBegin()
+	{
+		var begin = Hud.AddButton("Begin game", true, Control.LayoutPreset.Center, -200, 200, -48, 48, 38);
+		Hud.SetStatus("Choose your settings, then begin.", Muted);
+		begin.Pressed += () =>
+		{
+			begin.QueueFree();
+			Hud.SetStatus("", Muted);
+			Run(NewRound());
+		};
 	}
 
 	/// <summary>Google's test ad units until each game's real ones go in (see the release playbook).</summary>
@@ -522,11 +559,10 @@ public abstract partial class CardGame : Node3D
 			LeftRest = leftRest,
 			RightRest = rightRest,
 			HideWhenResting = seat == null,
+			LeftOnlyForShuffle = seat != null && seat.Holder == null,
 		};
-		if (seat == null)
+		if (seat == null || seat.Holder == null)
 			_shuffles.Rest(Table.Centre);
-		else if (seat.Holder == null)
-			left.GlobalTransform = leftRest;
 		return _shuffles;
 	}
 
@@ -651,7 +687,7 @@ public abstract partial class CardGame : Node3D
 	/// Ends a round: the status line, the winner's cards set alight (if given), a win counted for
 	/// you if you won, and Deal again offered (or, in the demo, the next round started).
 	/// </summary>
-	protected void Finish(string message, int winner, IEnumerable<Card3D>? winnersCards = null, Vector3? at = null)
+	protected void Finish(string message, int winner, IEnumerable<Card3D>? winnersCards = null, Vector3? at = null, IEnumerable<int>? winningSeats = null)
 	{
 		DevLog.Write($"finish: {message}");
 		Hud.SetStatus(message, Bright);
@@ -661,6 +697,17 @@ public abstract partial class CardGame : Node3D
 			var meshes = (winnersCards ?? Enumerable.Empty<Card3D>()).SelectMany(n => n.Meshes).ToList();
 			if (meshes.Count > 0)
 				_fire = Flames.SetAlight(this, at ?? Table.Centre, meshes, radius: 0.5f, size: 1.2f, withLight: true);
+			// The winners' hands clasp and cheer; everyone else's slip off the table.
+			var cheering = (winningSeats ?? new[] { winner }).ToHashSet();
+			for (int s = 0; s < Players; s++)
+			{
+				if (Hands[s] is not { } hands)
+					continue;
+				if (cheering.Contains(s))
+					hands.Cheer();
+				else
+					hands.Leave();
+			}
 		}
 		Hud.SetRestartVisible(false);
 		Hud.SetNewGameVisible(true);
@@ -780,9 +827,11 @@ public abstract partial class CardGame : Node3D
 
 	/// <summary>
 	/// Developer flags after `--` (or in user://dev_args.txt on a phone): `--log`, `--demo` (the
-	/// computer plays every seat), `--quit-after-demo`, `--players=4`, `--games-since-ad=4`,
-	/// `--art=user://art` (paints every card design to PNGs and quits), `--hands` (the glass hands
-	/// up close), plus the HUD's `--tutorial=N` and `--settings`, and the game's own.
+	/// computer plays every seat), `--quit-after-demo`, `--begin` (deals at once, with no Begin game
+	/// button), `--players=4`, `--games-since-ad=4`, `--art=user://art` (paints every card design to
+	/// PNGs and quits), `--hands` (the glass hands up close), `--seat-view=N` (the camera close in on
+	/// a seat's fan), `--bake-hands` (saves the hand meshes into the kit and quits), plus the HUD's
+	/// `--tutorial=N` and `--settings`, and the game's own.
 	/// </summary>
 	private void ReadDeveloperArgs()
 	{
@@ -796,6 +845,16 @@ public abstract partial class CardGame : Node3D
 				case "--demo":
 					Demo = true;
 					Settings.Muted = false;
+					break;
+				case "--bake-hands":
+					GD.Print($"Baked {HandShape.Bake()} hand meshes into {HandShape.Baked}");
+					GetTree().Quit();
+					break;
+				case "--seat-view":
+					_seatView = int.Parse(value);
+					break;
+				case "--begin":
+					_begin = true;
 					break;
 				case "--quit-after-demo":
 					QuitAfterDemo = true;
